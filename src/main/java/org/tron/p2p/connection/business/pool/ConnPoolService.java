@@ -245,6 +245,8 @@ public class ConnPoolService extends P2pEventHandler {
         .filter(peer -> !peer.isDisconnect())
         .filter(peer -> !peer.isTrustPeer())
         .filter(peer -> !peer.isActive())
+        .filter(peer -> System.currentTimeMillis() - peer.getLastActiveTime()
+            > p2pConfig.getNotActiveInterval())
         .collect(Collectors.toList());
 
     // if len(peers) >= 0, disconnect randomly
