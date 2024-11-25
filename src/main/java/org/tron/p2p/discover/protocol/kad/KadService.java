@@ -142,6 +142,7 @@ public class KadService implements DiscoverService {
         nodeHandler.handlePing((PingMessage) m);
         break;
       case KAD_PONG:
+        log.info("receive pong from node: {}", udpEvent.getAddress());
         nodeHandler.handlePong((PongMessage) m);
         break;
       case KAD_FIND_NODE:
