@@ -208,14 +208,7 @@ public class ChannelManager {
       return;
     }
 
-    Message message;
-    try {
-      message = Message.parse(data);
-    } catch (StackOverflowError e) {
-      log.warn("Receive stack overflow message from channel: {}", channel.getInetSocketAddress());
-      channel.close(Parameter.BAN_TIME_ONE_HOUR);
-      return;
-    }
+    Message message = Message.parse(data);
 
     if (message.needToLog()) {
       log.info("Receive message from channel: {}, {}", channel.getInetSocketAddress(), message);
