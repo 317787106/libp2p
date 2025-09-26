@@ -86,10 +86,21 @@ dependencies {
         exclude group: 'io.netty', module: 'netty-transport-classes-epoll'
         exclude group: 'io.netty', module: 'netty-transport-native-unix-common'
     })
-    implementation group: 'com.aliyun', name: 'alidns20150109', version: '3.0.1',{
+    implementation group: 'com.aliyun', name: 'alidns20150109', version: '3.0.1', {
         exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
         exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
+        exclude group: 'pull-parser', module: 'pull-parser'
+        exclude group: 'xpp3', module: 'xpp3'
     }
+
+    //If logging is required, uncomment this dependency
+    //implementation("ch.qos.logback:logback-classic:1.2.13") {
+    //    exclude group: 'jaxen', module: 'jaxen'
+    //    exclude group: 'javax.xml.stream', module: 'stax-api'
+    //    exclude group: 'net.java.dev.msv', module: 'xsdlib'
+    //    exclude group: 'pull-parser', module: 'pull-parser'
+    //    exclude group: 'xpp3', module: 'xpp3'
+    //}
 }
 
 tasks.matching { it instanceof Test }.all {
