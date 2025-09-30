@@ -17,7 +17,7 @@ Here’s how to include logback in your project using Gradle:
       }
   }
   ```
-2.  To fix DependencyVerificationException: Dependency verification failed for configuration ':xxx' x artifacts failed verification
+2.  Refresh the dependency verification metadata to prevent verification failures
 ```bash
 $ ./gradlew clean --refresh-dependencies --write-verification-metadata sha256
 ```
