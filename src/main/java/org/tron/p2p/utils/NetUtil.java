@@ -11,15 +11,14 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.ArrayList;
+import java.net.UnknownHostException;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -27,13 +26,22 @@ import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.tron.p2p.base.Constant;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.protos.Discover;
+import org.xbill.DNS.AAAARecord;
+import org.xbill.DNS.DohResolver;
+import org.xbill.DNS.Name;
+import org.xbill.DNS.Record;
+import org.xbill.DNS.Resolver;
+import org.xbill.DNS.Type;
+import org.xbill.DNS.lookup.LookupResult;
+import org.xbill.DNS.lookup.LookupSession;
 
 @Slf4j(topic = "net")
 public class NetUtil {
+
+  static Random gen = new Random();
 
   public static final Pattern PATTERN_IPv4 =
       Pattern.compile("^(1\\d{2}|2[0-4]\\d|25[0-5]|[1-9]\\d|[1-9])\\"
@@ -85,40 +93,113 @@ public class NetUtil {
   }
 
   public static byte[] getNodeId() {
-    Random gen = new Random();
     byte[] id = new byte[Constant.NODE_ID_LEN];
     gen.nextBytes(id);
     return id;
   }
 
-  private static String getExternalIp(String url) {
+  private static String getExternalIp(String url, boolean isAskIpv4) {
     BufferedReader in = null;
     String ip = null;
+    String domain = null;
     try {
-      URLConnection urlConnection = new URL(url).openConnection();
+      URL uri = new URL(url);
+      domain = uri.getHost();
+      URLConnection urlConnection = uri.openConnection();
       in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
       ip = in.readLine();
       if (ip == null || ip.trim().isEmpty()) {
         throw new IOException("Invalid address: " + ip);
       }
+      InetAddress inetAddress;
       try {
-        InetAddress.getByName(ip);
-      } catch (Exception e) {
+        inetAddress = InetAddress.getByName(ip);
+      } catch (UnknownHostException e) {
         throw new IOException("Invalid address: " + ip);
       }
-      return ip;
+      if (isAskIpv4 && !validIpV4(inetAddress.getHostAddress())) {
+        throw new IOException("Invalid address: " + ip);
+      }
+      if (!isAskIpv4 && !validIpV6(inetAddress.getHostAddress())) {
+        throw new IOException("Invalid address: " + ip);
+      }
+      ip = inetAddress.getHostAddress();
     } catch (Exception e) {
-      log.warn("Fail to get {} by {}, cause:{}",
+      log.debug("Fail to get {} by {}, cause:{}",
           Constant.ipV4Urls.contains(url) ? "ipv4" : "ipv6", url, e.getMessage());
-      return ip;
     } finally {
       if (in != null) {
         try {
           in.close();
         } catch (IOException e) {
+          //ignore
         }
       }
     }
+
+    if (!isAskIpv4 && StringUtils.isEmpty(ip) && StringUtils.isNotEmpty(domain)) {
+      try {
+        ip = getExternalIPv6ByDoh(domain);
+      } catch (Exception e) {
+        // ignore
+      }
+    }
+    if (StringUtils.isNotEmpty(ip)) {
+      log.info("Get {} from {} successfully", isAskIpv4 ? "ipv4" : "ipv6", url);
+    }
+    return ip;
+  }
+
+  /**
+   * get external ipv6 through dns server. Ask the ipv6 of specified domain through dns resolver
+   * first, and then execute `curl [ipv6]` to get the ipv6 of localhost
+   */
+  public static String getExternalIPv6ByDoh(String domain) throws Exception {
+    log.debug("Try to get ipv6 by {} through doh {}", domain, Constant.dnsResolver);
+    Resolver resolver = new DohResolver(Constant.dnsResolver);
+    LookupSession session = LookupSession.defaultBuilder()
+        .resolver(resolver)
+        .build();
+
+    Name name = Name.fromString(domain + ".");
+    CompletableFuture<LookupResult> future =
+        session.lookupAsync(name, Type.AAAA).toCompletableFuture();
+
+    LookupResult result = future.get();
+
+    InetAddress ipv6 = null;
+    for (Record recordItem : result.getRecords()) {
+      if (recordItem instanceof AAAARecord) {
+        ipv6 = ((AAAARecord) recordItem).getAddress();
+        break;
+      }
+    }
+    if (ipv6 == null) {
+      return null;
+    }
+    if (!(ipv6 instanceof Inet6Address)) {
+      return null;
+    }
+    log.debug("ipv6 of domain {} is {}", domain, ipv6.getHostAddress());
+
+    // use timeout 3s
+    String command = String.format("curl --max-time 3 http://[%s]", ipv6.getHostAddress());
+
+    Process process = Runtime.getRuntime().exec(command);
+    BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+    String ipv6Str = null;
+    String line;
+    while ((line = reader.readLine()) != null) {
+      ipv6Str = line.trim();
+    }
+    reader.close();
+
+    int exitCode = process.waitFor();
+    if (exitCode == 0 && validIpV6(ipv6Str)) {
+      return ipv6Str;
+    }
+
+    return null;
   }
 
   private static String getOuterIPv6Address() {
@@ -177,14 +258,15 @@ public class NetUtil {
 
   public static String getExternalIpV4() {
     long t1 = System.currentTimeMillis();
-    String ipV4 = getIp(Constant.ipV4Urls);
+    String ipV4 = getIp(Constant.ipV4Urls, true);
     log.debug("GetExternalIpV4 cost {} ms", System.currentTimeMillis() - t1);
     return ipV4;
   }
 
   public static String getExternalIpV6() {
     long t1 = System.currentTimeMillis();
-    String ipV6 = getIp(Constant.ipV6Urls);
+    //System.setProperty("java.net.preferIPv6Addresses ", "true");
+    String ipV6 = getIp(Constant.ipV6Urls, false);
     if (null == ipV6) {
       ipV6 = getOuterIPv6Address();
     }
@@ -212,30 +294,32 @@ public class NetUtil {
     }
   }
 
-  private static String getIp(List<String> multiSrcUrls) {
-    ExecutorService executor = Executors.newCachedThreadPool(
-        new BasicThreadFactory.Builder().namingPattern("getIp").build());
+  private static String getIp(List<String> multiSrcUrls, boolean isAskIpv4) {
+    int threadSize = multiSrcUrls.size();
+    ExecutorService executor = Executors.newFixedThreadPool(threadSize);
     CompletionService<String> completionService = new ExecutorCompletionService<>(executor);
 
-    List<Callable<String>> tasks = new ArrayList<>();
-    multiSrcUrls.forEach(url -> tasks.add(() -> getExternalIp(url)));
-
-    for (Callable<String> task : tasks) {
-      completionService.submit(task);
+    for (String url : multiSrcUrls) {
+      completionService.submit(() -> getExternalIp(url, isAskIpv4));
     }
 
-    Future<String> future;
-    String result = null;
-    try {
-      future = completionService.take();
-      result = future.get();
-    } catch (InterruptedException | ExecutionException e) {
-      //ignore
-    } finally {
-      executor.shutdownNow();
+    String ip = null;
+    for (int i = 0; i < threadSize; i++) {
+      try {
+        //block until any result return
+        Future<String> f = completionService.take();
+        String result = f.get();
+        if (StringUtils.isNotEmpty(result)) {
+          ip = result;
+          break;
+        }
+      } catch (Exception ignored) {
+        //ignore
+      }
     }
 
-    return result;
+    executor.shutdownNow();
+    return ip;
   }
 
   public static String getLanIP() {
