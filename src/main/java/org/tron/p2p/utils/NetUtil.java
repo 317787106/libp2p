@@ -145,7 +145,7 @@ public class NetUtil {
       }
     }
     if (StringUtils.isNotEmpty(ip)) {
-      log.info("Get {} from {} successfully", isAskIpv4 ? "ipv4" : "ipv6", url);
+      log.debug("Get {} from {} successfully", isAskIpv4 ? "ipv4" : "ipv6", url);
     }
     return ip;
   }

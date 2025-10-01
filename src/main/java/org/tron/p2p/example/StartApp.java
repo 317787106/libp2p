@@ -377,9 +377,7 @@ public class StartApp {
     List<InetSocketAddress> nodes = new ArrayList<>();
     for (String para : paras.split(",")) {
       InetSocketAddress inetSocketAddress = NetUtil.parseInetSocketAddress(para);
-      if (inetSocketAddress != null) {
-        nodes.add(inetSocketAddress);
-      }
+      nodes.add(inetSocketAddress);
     }
     return nodes;
   }
