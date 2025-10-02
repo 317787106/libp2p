@@ -24,7 +24,7 @@ public class Parameter {
 
   public static final int UDP_NETTY_WORK_THREAD_NUM = 1;
 
-  public static final int NODE_CONNECTION_TIMEOUT = 2000;
+  public static final int NODE_CONNECTION_TIMEOUT = 10000;
 
   public static final int KEEP_ALIVE_TIMEOUT = 20_000;
 
