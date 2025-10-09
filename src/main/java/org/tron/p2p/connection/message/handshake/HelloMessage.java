@@ -71,7 +71,7 @@ public class HelloMessage extends Message {
       }
       sb.append(line).append("\n");
     }
-    return sb.toString().trim();
+    return sb.toString();
   }
 
 }
