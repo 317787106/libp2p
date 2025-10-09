@@ -26,6 +26,7 @@ import java.util.concurrent.Future;
 import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.tron.p2p.base.Constant;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.protos.Discover;
@@ -296,7 +297,8 @@ public class NetUtil {
 
   private static String getIp(List<String> multiSrcUrls, boolean isAskIpv4) {
     int threadSize = multiSrcUrls.size();
-    ExecutorService executor = Executors.newFixedThreadPool(threadSize);
+    ExecutorService executor = Executors.newFixedThreadPool(threadSize,
+        BasicThreadFactory.builder().namingPattern("getIp").build());
     CompletionService<String> completionService = new ExecutorCompletionService<>(executor);
 
     for (String url : multiSrcUrls) {
