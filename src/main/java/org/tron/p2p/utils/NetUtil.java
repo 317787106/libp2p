@@ -103,6 +103,7 @@ public class NetUtil {
     BufferedReader in = null;
     String ip = null;
     String domain = null;
+    String errMsg = null;
     try {
       URL uri = new URL(url);
       domain = uri.getHost();
@@ -121,8 +122,7 @@ public class NetUtil {
       }
       ip = inetAddress.getHostAddress();
     } catch (Exception e) {
-      log.debug("Fail to get {} by {}, cause:{}",
-          Constant.ipV4Urls.contains(url) ? "ipv4" : "ipv6", url, e.getMessage());
+      errMsg = e.getMessage();
     } finally {
       if (in != null) {
         try {
@@ -143,6 +143,9 @@ public class NetUtil {
     }
     if (StringUtils.isNotEmpty(ip)) {
       log.debug("Get {} from {} successfully", isAskIpv4 ? "ipv4" : "ipv6", url);
+    } else if (StringUtils.isNotEmpty(errMsg)) {
+      log.warn("Fail to get {} by {}, cause:{}",
+          Constant.ipV4Urls.contains(url) ? "ipv4" : "ipv6", url, errMsg);
     }
     return ip;
   }
