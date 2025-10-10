@@ -11,7 +11,6 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.net.UnknownHostException;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
@@ -100,6 +99,7 @@ public class NetUtil {
   }
 
   private static String getExternalIp(String url, boolean isAskIpv4) {
+    // try to get ipv4 or ipv6 by url directly first
     BufferedReader in = null;
     String ip = null;
     String domain = null;
@@ -112,12 +112,7 @@ public class NetUtil {
       if (ip == null || ip.trim().isEmpty()) {
         throw new IOException("Invalid address: " + ip);
       }
-      InetAddress inetAddress;
-      try {
-        inetAddress = InetAddress.getByName(ip);
-      } catch (UnknownHostException e) {
-        throw new IOException("Invalid address: " + ip);
-      }
+      InetAddress inetAddress = InetAddress.getByName(ip);
       if (isAskIpv4 && !validIpV4(inetAddress.getHostAddress())) {
         throw new IOException("Invalid address: " + ip);
       }
@@ -138,6 +133,7 @@ public class NetUtil {
       }
     }
 
+    //if fails to get ipv6 directly, we use alternative method
     if (!isAskIpv4 && StringUtils.isEmpty(ip) && StringUtils.isNotEmpty(domain)) {
       try {
         ip = getExternalIPv6ByDoh(domain);
@@ -155,7 +151,7 @@ public class NetUtil {
    * get external ipv6 through dns server. Ask the ipv6 of specified domain through dns resolver
    * first, and then execute `curl [ipv6]` to get the ipv6 of localhost
    */
-  public static String getExternalIPv6ByDoh(String domain) throws Exception {
+  private static String getExternalIPv6ByDoh(String domain) throws Exception {
     log.debug("Try to get ipv6 by {} through doh {}", domain, Constant.dnsResolver);
     Resolver resolver = new DohResolver(Constant.dnsResolver);
     LookupSession session = LookupSession.defaultBuilder()
@@ -266,7 +262,6 @@ public class NetUtil {
 
   public static String getExternalIpV6() {
     long t1 = System.currentTimeMillis();
-    //System.setProperty("java.net.preferIPv6Addresses ", "true");
     String ipV6 = getIp(Constant.ipV6Urls, false);
     if (null == ipV6) {
       ipV6 = getOuterIPv6Address();
