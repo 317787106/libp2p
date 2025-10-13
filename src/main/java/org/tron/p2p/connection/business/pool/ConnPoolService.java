@@ -271,8 +271,8 @@ public class ConnPoolService extends P2pEventHandler {
       return;
     }
     connectingPeersCount.decrementAndGet();
-    if (poolLoopExecutor.getQueue().size() > Parameter.CONN_POOL_SIZE) {
-      log.warn("ConnPool task' size is bigger than {}", Parameter.CONN_POOL_SIZE);
+    if (poolLoopExecutor.getQueue().size() > Parameter.CONN_MAX_QUEUE_SIZE) {
+      log.warn("ConnPool task' size is bigger than {}", Parameter.CONN_MAX_QUEUE_SIZE);
       return;
     }
     try {
