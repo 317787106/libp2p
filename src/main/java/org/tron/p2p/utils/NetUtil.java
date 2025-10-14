@@ -154,7 +154,7 @@ public class NetUtil {
    * get external ipv6 through dns server. Ask the ipv6 of specified domain through dns resolver
    * first, and then execute `curl [ipv6]` to get the ipv6 of localhost
    */
-  private static String getExternalIPv6ByDoh(String domain) throws Exception {
+  public static String getExternalIPv6ByDoh(String domain) throws Exception {
     log.debug("Try to get ipv6 by {} through doh {}", domain, Constant.dnsResolver);
     Resolver resolver = new DohResolver(Constant.dnsResolver);
     LookupSession session = LookupSession.defaultBuilder()
