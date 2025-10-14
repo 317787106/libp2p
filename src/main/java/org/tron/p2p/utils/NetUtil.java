@@ -108,6 +108,8 @@ public class NetUtil {
       URL uri = new URL(url);
       domain = uri.getHost();
       URLConnection urlConnection = uri.openConnection();
+      urlConnection.setConnectTimeout(30_000); //ms
+      urlConnection.setReadTimeout(30_000); //ms
       in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
       ip = in.readLine();
       if (ip == null || ip.trim().isEmpty()) {
