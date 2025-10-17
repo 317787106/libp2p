@@ -21,11 +21,11 @@ Here’s how to include logback in your project using Gradle:
 ```bash
 $ ./gradlew clean --refresh-dependencies --write-verification-metadata sha256
 ```
-3. Rename logback.xml.example in src/main/resources to logback.xml.
+3. Rename or copy logback.xml.example in src/main/resources to logback.xml.
 
 
 # Build
-Building libp2p requires `git` and `Oracle JDK 1.8` to be installed, other JDK versions are not supported yet. Make sure you operate on `Linux` and `MacOS` operating systems.
+Building libp2p requires `git`, `JDK 17` or `Oracle JDK 1.8` to be installed, other JDK versions are not supported yet. Make sure you operate on `Linux` and `MacOS` operating systems.
 
 Clone the repo and switch to the `main` branch
 
@@ -43,12 +43,12 @@ $ ./gradlew clean build -x test
 libp2p can run independently or be imported into other projects.
 
 ## Run independently
-Running libp2p requires Oracle JDK 1.8 to be installed, other JDK versions are not supported yet. Make sure you operate on Linux and MacOS operating systems.
+Running libp2p requires JDK 17 or Oracle JDK 1.8 to be installed, other JDK versions are not supported yet. Make sure you operate on Linux and MacOS operating systems.
 then run the following command to start the node:
 ```bash
 $ nohup java -jar libp2p.jar [options] >> start.log 2>&1 &
 ```
-See the manual for details on [options](https://github.com/tronprotocol/libp2p/tree/develop/src/main/java/org/tron/p2p/example/README.md)
+See the manual for details on [options](src/main/java/org/tron/p2p/example/README.md)
 
 ## How to include the dependency
 ### Gradle Setting
@@ -90,7 +90,7 @@ dependencies {
 ```
 
 ## Example
-For some examples please check our [example package](https://github.com/tronprotocol/libp2p/tree/develop/src/main/java/org/tron/p2p/example). 
+For some examples please check our [example package](src/main/java/org/tron/p2p/example).
 
 # Integrity Check
 * After February 21, 2023， releases are signed the gpg key:
