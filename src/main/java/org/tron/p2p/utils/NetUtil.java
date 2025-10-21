@@ -11,15 +11,12 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
-import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletionService;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorCompletionService;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -91,7 +88,7 @@ public class NetUtil {
     return id;
   }
 
-  private static String getExternalIp(String url) {
+  private static String getExternalIp(String url, boolean isAskIpv4) {
     BufferedReader in = null;
     String ip = null;
     try {
@@ -101,9 +98,11 @@ public class NetUtil {
       if (ip == null || ip.trim().isEmpty()) {
         throw new IOException("Invalid address: " + ip);
       }
-      try {
-        InetAddress.getByName(ip);
-      } catch (Exception e) {
+      InetAddress inetAddress = InetAddress.getByName(ip);
+      if (isAskIpv4 && !validIpV4(inetAddress.getHostAddress())) {
+        throw new IOException("Invalid address: " + ip);
+      }
+      if (!isAskIpv4 && !validIpV6(inetAddress.getHostAddress())) {
         throw new IOException("Invalid address: " + ip);
       }
       return ip;
@@ -116,6 +115,7 @@ public class NetUtil {
         try {
           in.close();
         } catch (IOException e) {
+          //ignore
         }
       }
     }
@@ -177,14 +177,14 @@ public class NetUtil {
 
   public static String getExternalIpV4() {
     long t1 = System.currentTimeMillis();
-    String ipV4 = getIp(Constant.ipV4Urls);
+    String ipV4 = getIp(Constant.ipV4Urls, true);
     log.debug("GetExternalIpV4 cost {} ms", System.currentTimeMillis() - t1);
     return ipV4;
   }
 
   public static String getExternalIpV6() {
     long t1 = System.currentTimeMillis();
-    String ipV6 = getIp(Constant.ipV6Urls);
+    String ipV6 = getIp(Constant.ipV6Urls, false);
     if (null == ipV6) {
       ipV6 = getOuterIPv6Address();
     }
@@ -212,30 +212,33 @@ public class NetUtil {
     }
   }
 
-  private static String getIp(List<String> multiSrcUrls) {
-    ExecutorService executor = Executors.newCachedThreadPool(
+  private static String getIp(List<String> multiSrcUrls, boolean isAskIpv4) {
+    int threadSize = multiSrcUrls.size();
+    ExecutorService executor = Executors.newFixedThreadPool(threadSize,
         BasicThreadFactory.builder().namingPattern("getIp").build());
     CompletionService<String> completionService = new ExecutorCompletionService<>(executor);
 
-    List<Callable<String>> tasks = new ArrayList<>();
-    multiSrcUrls.forEach(url -> tasks.add(() -> getExternalIp(url)));
-
-    for (Callable<String> task : tasks) {
-      completionService.submit(task);
+    for (String url : multiSrcUrls) {
+      completionService.submit(() -> getExternalIp(url, isAskIpv4));
     }
 
-    Future<String> future;
-    String result = null;
-    try {
-      future = completionService.take();
-      result = future.get();
-    } catch (InterruptedException | ExecutionException e) {
-      //ignore
-    } finally {
-      executor.shutdownNow();
+    String ip = null;
+    for (int i = 0; i < threadSize; i++) {
+      try {
+        //block until any result return
+        Future<String> f = completionService.take();
+        String result = f.get();
+        if (StringUtils.isNotEmpty(result)) {
+          ip = result;
+          break;
+        }
+      } catch (Exception ignored) {
+        //ignore
+      }
     }
 
-    return result;
+    executor.shutdownNow();
+    return ip;
   }
 
   public static String getLanIP() {
