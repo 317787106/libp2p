@@ -8,6 +8,7 @@ import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.Socket;
 import java.net.SocketException;
 import java.net.URL;
 import java.net.URLConnection;
@@ -254,7 +255,15 @@ public class NetUtil {
       return IPADDRESS_LOCALHOST;
     }
     while (networkInterfaces.hasMoreElements()) {
-      Enumeration<InetAddress> inetAds = networkInterfaces.nextElement().getInetAddresses();
+      NetworkInterface ni = networkInterfaces.nextElement();
+      try {
+        if (!ni.isUp() || ni.isLoopback() || ni.isVirtual()) {
+          continue;
+        }
+      } catch (SocketException e) {
+        continue;
+      }
+      Enumeration<InetAddress> inetAds = ni.getInetAddresses();
       while (inetAds.hasMoreElements()) {
         InetAddress inetAddress = inetAds.nextElement();
         if (inetAddress instanceof Inet4Address && !isReservedAddress(inetAddress)) {
