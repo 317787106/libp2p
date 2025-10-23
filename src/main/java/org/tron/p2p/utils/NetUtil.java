@@ -93,8 +93,8 @@ public class NetUtil {
     String ip = null;
     try {
       URLConnection urlConnection = new URL(url).openConnection();
-      urlConnection.setConnectTimeout(30_000); //ms
-      urlConnection.setReadTimeout(30_000); //ms
+      urlConnection.setConnectTimeout(10_000); //ms
+      urlConnection.setReadTimeout(10_000); //ms
       in = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
       ip = in.readLine();
       if (ip == null || ip.trim().isEmpty()) {
@@ -111,7 +111,7 @@ public class NetUtil {
     } catch (Exception e) {
       log.warn("Fail to get {} by {}, cause:{}",
           Constant.ipV4Urls.contains(url) ? "ipv4" : "ipv6", url, e.getMessage());
-      return ip;
+      return null;
     } finally {
       if (in != null) {
         try {
