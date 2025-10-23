@@ -226,10 +226,10 @@ New p2p config instance
 P2pConfig config = new P2pConfig();
 ```
 
-Set p2p version
+Set p2p networkId (also called p2p version)
 
 ```bash
-config.setVersion(11111);
+config.setNetworkId(11111);
 ```
 
 Set TCP and UDP listen port
