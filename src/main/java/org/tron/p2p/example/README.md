@@ -416,6 +416,6 @@ p2pService.start(config);
 ```
 
 For details please
-check [ImportUsing](src/main/java/org/tron/p2p/example/ImportUsing.java), [DnsExample1](src/main/java/org/tron/p2p/example/DnsExample1.java), [DnsExample2](src/main/java/org/tron/p2p/example/DnsExample2.java)
+check [ImportUsing](ImportUsing.java), [DnsExample1](DnsExample1.java), [DnsExample2](DnsExample2.java)
 
 
