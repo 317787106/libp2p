@@ -3,6 +3,7 @@ package org.tron.p2p.utils;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -41,6 +42,8 @@ public class NetUtil {
   //https://codeantenna.com/a/jvrULhCbdj
   public static final Pattern PATTERN_IPv6 = Pattern.compile(
       "^\\s*((([0-9A-Fa-f]{1,4}:){7}([0-9A-Fa-f]{1,4}|:))|(([0-9A-Fa-f]{1,4}:){6}(:[0-9A-Fa-f]{1,4}|((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){5}(((:[0-9A-Fa-f]{1,4}){1,2})|:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3})|:))|(([0-9A-Fa-f]{1,4}:){4}(((:[0-9A-Fa-f]{1,4}){1,3})|((:[0-9A-Fa-f]{1,4})?:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){3}(((:[0-9A-Fa-f]{1,4}){1,4})|((:[0-9A-Fa-f]{1,4}){0,2}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){2}(((:[0-9A-Fa-f]{1,4}){1,5})|((:[0-9A-Fa-f]{1,4}){0,3}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(([0-9A-Fa-f]{1,4}:){1}(((:[0-9A-Fa-f]{1,4}){1,6})|((:[0-9A-Fa-f]{1,4}){0,4}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:))|(:(((:[0-9A-Fa-f]{1,4}){1,7})|((:[0-9A-Fa-f]{1,4}){0,5}:((25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)){3}))|:)))(%.+)?\\s*$");
+
+  private static final String IPADDRESS_LOCALHOST = "127.0.0.1";
 
   public static boolean validIpV4(String ip) {
     if (StringUtils.isEmpty(ip)) {
@@ -244,13 +247,34 @@ public class NetUtil {
   }
 
   public static String getLanIP() {
-    String lanIP;
-    try (Socket s = new Socket("www.baidu.com", 80)) {
-      lanIP = s.getLocalAddress().getHostAddress();
-    } catch (IOException e) {
-      log.warn("Can't get lan IP. Fall back to 127.0.0.1: " + e);
-      lanIP = "127.0.0.1";
+    Enumeration<NetworkInterface> networkInterfaces;
+    try {
+      networkInterfaces = NetworkInterface.getNetworkInterfaces();
+    } catch (SocketException e) {
+      log.warn("Can't get lan IP. Fall back to {}", IPADDRESS_LOCALHOST, e);
+      return IPADDRESS_LOCALHOST;
     }
-    return lanIP;
+    while (networkInterfaces.hasMoreElements()) {
+      NetworkInterface ni = networkInterfaces.nextElement();
+      try {
+        if (!ni.isUp() || ni.isLoopback() || ni.isVirtual()) {
+          continue;
+        }
+      } catch (SocketException e) {
+        continue;
+      }
+      Enumeration<InetAddress> inetAds = ni.getInetAddresses();
+      while (inetAds.hasMoreElements()) {
+        InetAddress inetAddress = inetAds.nextElement();
+        if (inetAddress instanceof Inet4Address && !isReservedAddress(inetAddress)) {
+          String ipAddress = inetAddress.getHostAddress();
+          if (PATTERN_IPv4.matcher(ipAddress).find()) {
+            return ipAddress;
+          }
+        }
+      }
+    }
+    log.warn("Can't get lan IP. Fall back to {}", IPADDRESS_LOCALHOST);
+    return IPADDRESS_LOCALHOST;
   }
 }

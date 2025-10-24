@@ -1,7 +1,9 @@
 package org.tron.p2p.utils;
 
+import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
+import java.net.Socket;
 import org.junit.Assert;
 import org.junit.Test;
 import org.tron.p2p.base.Constant;
@@ -95,10 +97,22 @@ public class NetUtilTest {
     Assert.assertEquals(ip3, ip4);
   }
 
+  private String getLanIP2() {
+    String lanIP;
+    try (Socket s = new Socket("www.baidu.com", 80)) {
+      lanIP = s.getLocalAddress().getHostAddress();
+    } catch (IOException e) {
+      lanIP = "127.0.0.1";
+    }
+    return lanIP;
+  }
+
   @Test
   public void testGetLanIP() {
     String lanIpv4 = NetUtil.getLanIP();
     Assert.assertNotNull(lanIpv4);
+    String lanIpv4Old = getLanIP2();
+    Assert.assertEquals(lanIpv4, lanIpv4Old);
   }
 
   @Test
