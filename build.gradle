@@ -218,14 +218,6 @@ publishing {
                         name = 'chengtx01'
                         email = 'ctxhorse@gmail.com'
                     }
-                    developer {
-                        name = 'jiangyuanshu'
-                        email = '317787106@qq.com'
-                    }
-                    developer {
-                        name = 'wubin01'
-                        email = 'wb_bupt@163.com'
-                    }
                 }
                 scm {
                     url = 'https://github.com/tronprotocol/libp2p'
