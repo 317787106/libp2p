@@ -213,6 +213,20 @@ publishing {
                         url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
                     }
                 }
+                developers {
+                    developer {
+                        name = 'chengtx01'
+                        email = 'ctxhorse@gmail.com'
+                    }
+                    developer {
+                        name = 'jiangyuanshu'
+                        email = '317787106@qq.com'
+                    }
+                    developer {
+                        name = 'wubin01'
+                        email = 'wb_bupt@163.com'
+                    }
+                }
                 scm {
                     url = 'https://github.com/tronprotocol/libp2p'
                     connection = 'scm:git:git://github.com/tronprotocol/libp2p.git'
