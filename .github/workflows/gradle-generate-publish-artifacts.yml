@@ -270,7 +270,7 @@ jobs:
               exit 1
             fi
             echo "Signing $file..."
-            gpg --quiet --batch --yes --local-user ${{ secrets.GPG_FINGERPRINT }} --armor --detach-sign "$file"
+            gpg --verbose --batch --yes --local-user ${{ secrets.GPG_FINGERPRINT }} --armor --detach-sign "$file"
             compute_md5 ${file}.asc > ${file}.asc.md5
             shasum -a 1 ${file}.asc | awk '{print $1}' > ${file}.asc.sha1
             shasum -a 256 ${file}.asc | awk '{print $1}' > ${file}.asc.sha256
