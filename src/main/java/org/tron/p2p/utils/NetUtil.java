@@ -214,7 +214,7 @@ public class NetUtil {
 
   private static String getIp(List<String> multiSrcUrls) {
     ExecutorService executor = Executors.newCachedThreadPool(
-        new BasicThreadFactory.Builder().namingPattern("getIp").build());
+        BasicThreadFactory.builder().namingPattern("getIp").build());
     CompletionService<String> completionService = new ExecutorCompletionService<>(executor);
 
     List<Callable<String>> tasks = new ArrayList<>();
