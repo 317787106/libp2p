@@ -7,7 +7,6 @@ import org.tron.p2p.connection.message.MessageType;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.protos.Connect;
 import org.tron.p2p.protos.Discover;
-import org.tron.p2p.utils.ByteArray;
 import org.tron.p2p.utils.NetUtil;
 
 public class HelloMessage extends Message {
@@ -53,25 +52,13 @@ public class HelloMessage extends Message {
 
   @Override
   public String toString() {
-    return "[HelloMessage: " + format();
+    return "HelloMessage networkId: " + getNetworkId() +
+            ", version: " + getVersion() +
+            ", code: " + getCode();
   }
 
   @Override
   public boolean valid() {
     return NetUtil.validNode(getFrom());
   }
-
-  public String format() {
-    String[] lines = helloMessage.toString().split("\n");
-    StringBuilder sb = new StringBuilder();
-    for (String line : lines) {
-      if (line.contains("nodeId")) {
-        String nodeId = ByteArray.toHexString(helloMessage.getFrom().getNodeId().toByteArray());
-        line = "  nodeId: \"" + nodeId + "\"";
-      }
-      sb.append(line).append("\n");
-    }
-    return sb.toString();
-  }
-
 }
