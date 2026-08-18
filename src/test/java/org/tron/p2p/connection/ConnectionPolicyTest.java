@@ -3,14 +3,17 @@ package org.tron.p2p.connection;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
+import io.netty.channel.embedded.EmbeddedChannel;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.tron.p2p.P2pConfig;
 import org.tron.p2p.base.Parameter;
+import org.tron.p2p.connection.socket.MessageHandler;
 import org.tron.p2p.connection.socket.PeerClient;
 import org.tron.p2p.discover.Node;
 
@@ -84,5 +87,25 @@ public class ConnectionPolicyTest {
       Parameter.p2pConfig = previousConfig;
       ChannelManager.isShutdown = previousShutdown;
     }
+  }
+
+  @Test
+  public void messageHandlerClosesBlockedTcpChannelBeforeHandshake() {
+    Parameter.p2pConfig = new P2pConfig();
+    final InetSocketAddress address = new InetSocketAddress("192.0.2.41", 18888);
+    ConnectionPolicy.replaceBlockedIps(Collections.singleton(address.getAddress()));
+    Channel channel = new Channel();
+    EmbeddedChannel embeddedChannel = new EmbeddedChannel() {
+      @Override
+      protected SocketAddress remoteAddress0() {
+        return address;
+      }
+    };
+
+    Assert.assertTrue(embeddedChannel.isOpen());
+    embeddedChannel.pipeline().addLast(new MessageHandler(channel));
+    embeddedChannel.pipeline().fireChannelActive();
+
+    Assert.assertFalse(embeddedChannel.isOpen());
   }
 }

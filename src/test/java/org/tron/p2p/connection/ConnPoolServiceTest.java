@@ -14,7 +14,6 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.tron.p2p.P2pConfig;
-import org.tron.p2p.P2pService;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.business.pool.ConnPoolService;
 import org.tron.p2p.connection.socket.PeerClient;
@@ -128,7 +127,7 @@ public class ConnPoolServiceTest {
   }
 
   @Test
-  public void poolScanUsesLiveActiveNodesAndDialCooldown() throws Exception {
+  public void poolScanUsesLiveActiveNodesWithoutDialCooldown() throws Exception {
     clearChannels();
     ConnectionPolicy.replaceBlockedIps(new HashSet<>());
     InetSocketAddress address = new InetSocketAddress("192.0.2.10", 18888);
@@ -147,18 +146,17 @@ public class ConnPoolServiceTest {
     try {
       connect.invoke(connPoolService, false);
       connect.invoke(connPoolService, false);
-      Assert.assertEquals(1, peerClient.connectCount);
-      Assert.assertFalse(peerClient.lastTrigger);
+      Assert.assertEquals(2, peerClient.connectCount);
 
       Parameter.p2pConfig.getActiveNodes().remove(address);
       connect.invoke(connPoolService, false);
-      Assert.assertEquals(1, peerClient.connectCount);
+      Assert.assertEquals(2, peerClient.connectCount);
 
       InetSocketAddress blocked = new InetSocketAddress("192.0.2.12", 18888);
       Parameter.p2pConfig.getActiveNodes().add(blocked);
       ConnectionPolicy.replaceBlockedIps(Collections.singleton(blocked.getAddress()));
       connect.invoke(connPoolService, false);
-      Assert.assertEquals(1, peerClient.connectCount);
+      Assert.assertEquals(2, peerClient.connectCount);
     } finally {
       Parameter.p2pConfig.getActiveNodes().clear();
       Parameter.p2pConfig.setMinConnections(minConnections);
@@ -167,31 +165,13 @@ public class ConnPoolServiceTest {
     }
   }
 
-  @Test
-  public void addActiveNodeIsIdempotentAndRemoveUsesLiveCollection() {
-    InetSocketAddress address = new InetSocketAddress("192.0.2.13", 18888);
-    P2pService p2pService = new P2pService();
-    try {
-      Assert.assertTrue(p2pService.addActiveNode(address));
-      Assert.assertFalse(p2pService.addActiveNode(address));
-      Assert.assertTrue(Parameter.p2pConfig.getActiveNodes().contains(address));
-      Assert.assertTrue(p2pService.removeActiveNode(address));
-      Assert.assertFalse(p2pService.removeActiveNode(address));
-    } finally {
-      Parameter.p2pConfig.getActiveNodes().remove(address);
-    }
-  }
-
   private static class CountingPeerClient extends PeerClient {
 
     private int connectCount;
-    private boolean lastTrigger;
 
     @Override
-    public io.netty.channel.ChannelFuture connectAsync(Node node, boolean discoveryMode,
-        boolean trigger) {
+    public io.netty.channel.ChannelFuture connectAsync(Node node, boolean discoveryMode) {
       connectCount++;
-      lastTrigger = trigger;
       return null;
     }
   }

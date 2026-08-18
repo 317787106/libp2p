@@ -46,7 +46,11 @@ public class PeerClient {
 
   public ChannelFuture connect(Node node, ChannelFutureListener future) {
     InetSocketAddress address = node.getPreferInetSocketAddress();
-    ChannelFuture channelFuture = connectAsync(address,
+    if (ConnectionPolicy.isBlocked(address)) {
+      return null;
+    }
+    ChannelFuture channelFuture = connectAsync(
+        address.getAddress().getHostAddress(), node.getPort(),
         node.getId() == null ? Hex.toHexString(NetUtil.getNodeId()) : node.getHexId(), false,
         false);
     if (ChannelManager.isShutdown) {
@@ -59,14 +63,14 @@ public class PeerClient {
   }
 
   public ChannelFuture connectAsync(Node node, boolean discoveryMode) {
-    return connectAsync(node, discoveryMode, true);
-  }
-
-  public ChannelFuture connectAsync(Node node, boolean discoveryMode, boolean trigger) {
     InetSocketAddress address = node.getPreferInetSocketAddress();
-    ChannelFuture channelFuture = connectAsync(address,
+    if (ConnectionPolicy.isBlocked(address)) {
+      return null;
+    }
+    ChannelFuture channelFuture =
+        connectAsync(address.getAddress().getHostAddress(), node.getPort(),
             node.getId() == null ? Hex.toHexString(NetUtil.getNodeId()) : node.getHexId(),
-            discoveryMode, trigger);
+            discoveryMode, true);
     if (ChannelManager.isShutdown) {
       return null;
     }
@@ -76,7 +80,7 @@ public class PeerClient {
           log.warn("Connect to peer {} fail, cause:{}", node.getPreferInetSocketAddress(),
               future.cause().getMessage());
           future.channel().close();
-          if (!discoveryMode && trigger) {
+          if (!discoveryMode) {
             ChannelManager.triggerConnect(node.getPreferInetSocketAddress());
           }
         }
@@ -87,15 +91,6 @@ public class PeerClient {
 
   private ChannelFuture connectAsync(String host, int port, String remoteId,
       boolean discoveryMode, boolean trigger) {
-    return connectAsync(new InetSocketAddress(host, port), remoteId, discoveryMode, trigger);
-  }
-
-  private ChannelFuture connectAsync(InetSocketAddress address, String remoteId,
-      boolean discoveryMode, boolean trigger) {
-    if (address == null || address.isUnresolved() || ConnectionPolicy.isBlocked(address)) {
-      log.debug("Skip outbound connection to disallowed address {}", address);
-      return null;
-    }
 
     P2pChannelInitializer p2pChannelInitializer = new P2pChannelInitializer(remoteId,
         discoveryMode, trigger);
@@ -106,7 +101,7 @@ public class PeerClient {
     b.option(ChannelOption.SO_KEEPALIVE, true);
     b.option(ChannelOption.MESSAGE_SIZE_ESTIMATOR, DefaultMessageSizeEstimator.DEFAULT);
     b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Parameter.NODE_CONNECTION_TIMEOUT);
-    b.remoteAddress(address);
+    b.remoteAddress(host, port);
     b.handler(p2pChannelInitializer);
     if (ChannelManager.isShutdown) {
       return null;

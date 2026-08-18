@@ -64,7 +64,6 @@ public class ChannelManager {
 
   public static void init() {
     isInit = true;
-    isShutdown = false;
     peerServer = new PeerServer();
     peerClient = new PeerClient();
     keepAliveService = new KeepAliveService();
@@ -87,9 +86,6 @@ public class ChannelManager {
   }
 
   public static ChannelFuture connect(Node node, ChannelFutureListener future) {
-    if (node == null || ConnectionPolicy.isBlocked(node.getPreferInetSocketAddress())) {
-      return null;
-    }
     return peerClient.connect(node, future);
   }
 
@@ -120,7 +116,7 @@ public class ChannelManager {
 
     if (ConnectionPolicy.isBlocked(channel.getInetAddress())) {
       log.debug("Peer {} is manually blocked", channel);
-      return DisconnectCode.MANUALLY_BLOCKED;
+      return DisconnectCode.UNKNOWN;
     }
 
     if (!channel.isActive() && !channel.isTrustPeer()) {
@@ -179,9 +175,6 @@ public class ChannelManager {
         break;
       case MAX_CONNECTION_WITH_SAME_IP:
         disconnectReason = DisconnectReason.TOO_MANY_PEERS_WITH_SAME_IP;
-        break;
-      case MANUALLY_BLOCKED:
-        disconnectReason = DisconnectReason.UNKNOWN;
         break;
       default: {
         disconnectReason = DisconnectReason.UNKNOWN;

@@ -64,10 +64,10 @@ public class P2pService {
 
   public boolean addActiveNode(InetSocketAddress address) {
     NetUtil.validateInetSocketAddress(address);
-    P2pConfig p2pConfig = requireConfig();
     if (ConnectionPolicy.isBlocked(address)) {
       return false;
     }
+    P2pConfig p2pConfig = Parameter.p2pConfig;
     List<InetSocketAddress> activeNodes = p2pConfig.getActiveNodes();
     boolean changed;
     synchronized (activeNodes) {
@@ -81,7 +81,7 @@ public class P2pService {
 
   public boolean removeActiveNode(InetSocketAddress address) {
     NetUtil.validateInetSocketAddress(address);
-    List<InetSocketAddress> activeNodes = requireConfig().getActiveNodes();
+    List<InetSocketAddress> activeNodes = Parameter.p2pConfig.getActiveNodes();
     boolean changed;
     synchronized (activeNodes) {
       changed = activeNodes.remove(address);
@@ -98,16 +98,11 @@ public class P2pService {
   }
 
   public int replaceBlockedIps(Set<InetAddress> blockedIps) {
-    requireConfig();
     ConnectionPolicy.replaceBlockedIps(blockedIps);
     int disconnectedCount = ChannelManager.disconnectBlockedIps();
     log.info("Replaced blocked IPs, size {}, disconnected channels {}",
         blockedIps.size(), disconnectedCount);
     return disconnectedCount;
-  }
-
-  public void updateNodeId(Channel channel, String nodeId) {
-    ChannelManager.updateNodeId(channel, nodeId);
   }
 
   public P2pStats getP2pStats() {
@@ -132,14 +127,11 @@ public class P2pService {
     return new ArrayList<>(nodes);
   }
 
-  public int getVersion() {
-    return Parameter.version;
+  public void updateNodeId(Channel channel, String nodeId) {
+    ChannelManager.updateNodeId(channel, nodeId);
   }
 
-  private P2pConfig requireConfig() {
-    if (Parameter.p2pConfig == null) {
-      throw new IllegalStateException("P2p service has not been started");
-    }
-    return Parameter.p2pConfig;
+  public int getVersion() {
+    return Parameter.version;
   }
 }

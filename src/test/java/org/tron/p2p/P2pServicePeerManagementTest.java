@@ -1,6 +1,7 @@
 package org.tron.p2p;
 
 import java.net.InetSocketAddress;
+import java.util.ArrayList;
 import java.util.Collections;
 import org.junit.After;
 import org.junit.Assert;
@@ -39,7 +40,8 @@ public class P2pServicePeerManagementTest {
   @Test
   public void removeAndDisconnectDoNotChangeEachOthersState() {
     InetSocketAddress address = new InetSocketAddress("192.0.2.21", 18888);
-    Parameter.p2pConfig.getActiveNodes().add(address);
+    Assert.assertTrue(p2pService.addActiveNode(address));
+    Assert.assertFalse(p2pService.addActiveNode(address));
 
     Assert.assertEquals(0, p2pService.disconnect(address));
     Assert.assertTrue(Parameter.p2pConfig.getActiveNodes().contains(address));
@@ -55,5 +57,17 @@ public class P2pServicePeerManagementTest {
     } catch (IllegalArgumentException expected) {
       Assert.assertTrue(expected.getMessage().contains("must be resolved"));
     }
+  }
+
+  @Test
+  public void activeNodeSetterKeepsCollectionSafeForRuntimeUpdates() {
+    P2pConfig config = new P2pConfig();
+    config.setActiveNodes(new ArrayList<InetSocketAddress>());
+
+    java.util.Iterator<InetSocketAddress> iterator = config.getActiveNodes().iterator();
+    config.getActiveNodes().add(new InetSocketAddress("192.0.2.22", 18888));
+
+    Assert.assertFalse(iterator.hasNext());
+    Assert.assertEquals(1, config.getActiveNodes().size());
   }
 }

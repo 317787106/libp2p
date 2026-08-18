@@ -6,13 +6,11 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.tron.p2p.P2pConfig;
 import org.tron.p2p.base.Parameter;
-import org.tron.p2p.connection.ConnectionPolicy;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.discover.message.kad.PingMessage;
 import org.tron.p2p.discover.socket.UdpEvent;
 
 import java.net.InetSocketAddress;
-import java.util.Collections;
 
 public class KadServiceTest {
 
@@ -46,25 +44,6 @@ public class KadServiceTest {
     kadService.handleEvent(event);
     Assert.assertEquals(2, kadService.getAllNodes().size());
 
-  }
-
-  @Test
-  public void blockedSenderStillParticipatesInUdpDiscovery() {
-    KadService localService = new KadService();
-    localService.init();
-    Node blockedNode = new Node(new InetSocketAddress("127.0.0.9", 22222));
-    ConnectionPolicy.replaceBlockedIps(
-        Collections.singleton(blockedNode.getPreferInetSocketAddress().getAddress()));
-    UdpEvent event = new UdpEvent(new PingMessage(blockedNode, localService.getPublicHomeNode()),
-        blockedNode.getPreferInetSocketAddress());
-
-    try {
-      localService.handleEvent(event);
-      Assert.assertEquals(1, localService.getAllNodes().size());
-    } finally {
-      ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
-      localService.close();
-    }
   }
 
 

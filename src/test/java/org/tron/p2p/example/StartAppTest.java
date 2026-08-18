@@ -1,5 +1,6 @@
 package org.tron.p2p.example;
 
+import java.lang.reflect.Method;
 import java.net.InetAddress;
 import java.util.Set;
 import org.apache.commons.cli.CommandLine;
@@ -11,8 +12,10 @@ public class StartAppTest {
   @Test
   public void parseBlockedIpsFromCli() throws Exception {
     StartApp app = new StartApp();
-    CommandLine cli = app.parseCli(new String[]{"--blocked-ips",
-        "192.0.2.1,2001:db8::1,192.0.2.1"});
+    Method parseCli = StartApp.class.getDeclaredMethod("parseCli", String[].class);
+    parseCli.setAccessible(true);
+    CommandLine cli = (CommandLine) parseCli.invoke(app,
+        (Object) new String[]{"--blocked-ips", "192.0.2.1,2001:db8::1,192.0.2.1"});
 
     Set<InetAddress> blockedIps = app.parseInetAddressSet(cli.getOptionValue("b"));
 

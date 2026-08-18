@@ -10,7 +10,7 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Runtime connection policy shared by TCP and node discovery paths.
+ * Runtime connection policy shared by TCP connection paths.
  */
 public final class ConnectionPolicy {
 

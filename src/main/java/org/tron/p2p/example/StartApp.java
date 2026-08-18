@@ -121,7 +121,7 @@ public class StartApp {
     }
   }
 
-  CommandLine parseCli(String[] args) throws ParseException {
+  private CommandLine parseCli(String[] args) throws ParseException {
     Options kadOptions = getKadOptions();
     Options dnsReadOptions = getDnsReadOption();
     Options dnsPublishOptions = getDnsPublishOption();

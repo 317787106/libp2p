@@ -141,7 +141,6 @@ public class ChannelManagerTest {
 
   @Test
   public synchronized void testProcessPeerRejectsManuallyBlockedIp() throws Exception {
-    clearChannels();
     Parameter.p2pConfig = new P2pConfig();
     InetSocketAddress address = new InetSocketAddress("192.0.2.30", 18888);
     Channel channel = newChannel(address);
@@ -149,15 +148,13 @@ public class ChannelManagerTest {
 
     DisconnectCode code = ChannelManager.processPeer(channel);
 
-    Assert.assertEquals(DisconnectCode.MANUALLY_BLOCKED, code);
+    Assert.assertEquals(DisconnectCode.UNKNOWN, code);
     Assert.assertFalse(ChannelManager.getChannels().containsKey(address));
-    ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
   }
 
   @Test
   public synchronized void testDisconnectUsesEndpointAndBlockedReplacementUsesIp()
       throws Exception {
-    clearChannels();
     Parameter.p2pConfig = new P2pConfig();
     InetSocketAddress firstAddress = new InetSocketAddress("192.0.2.31", 18888);
     InetSocketAddress secondAddress = new InetSocketAddress("192.0.2.31", 18889);
@@ -178,9 +175,6 @@ public class ChannelManagerTest {
     Assert.assertEquals(1, ChannelManager.disconnectBlockedIps());
     Assert.assertTrue(second.isDisconnect());
     Assert.assertFalse(other.isDisconnect());
-
-    ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
-    clearChannels();
   }
 
   private Channel newChannel(InetSocketAddress address) throws Exception {

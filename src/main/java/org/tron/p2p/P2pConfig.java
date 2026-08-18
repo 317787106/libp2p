@@ -37,4 +37,8 @@ public class P2pConfig {
 
   //dns publish config
   private PublishConfig publishConfig = new PublishConfig();
+
+  public void setActiveNodes(List<InetSocketAddress> activeNodes) {
+    this.activeNodes = new CopyOnWriteArrayList<>(activeNodes);
+  }
 }
