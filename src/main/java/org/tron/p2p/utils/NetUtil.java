@@ -221,6 +221,23 @@ public class NetUtil {
     if (address == null || address.isUnresolved() || address.getPort() <= 0) {
       throw new IllegalArgumentException("address must be resolved and use a valid port");
     }
+    InetAddress inetAddress = address.getAddress();
+    if (inetAddress.isAnyLocalAddress() || inetAddress.isMulticastAddress()
+        || isLimitedBroadcastAddress(inetAddress)) {
+      throw new IllegalArgumentException(
+          "address must not use an unspecified, multicast, or broadcast IP");
+    }
+  }
+
+  private static boolean isLimitedBroadcastAddress(InetAddress address) {
+    if (!(address instanceof Inet4Address)) {
+      return false;
+    }
+    byte[] bytes = address.getAddress();
+    return (bytes[0] & 0xFF) == 0xFF
+        && (bytes[1] & 0xFF) == 0xFF
+        && (bytes[2] & 0xFF) == 0xFF
+        && (bytes[3] & 0xFF) == 0xFF;
   }
 
   private static String getIp(List<String> multiSrcUrls, boolean isAskIpv4) {

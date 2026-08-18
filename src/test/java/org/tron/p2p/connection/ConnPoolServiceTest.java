@@ -61,19 +61,10 @@ public class ConnPoolServiceTest {
   }
 
   @Test
-  public void getNodes_orderByUpdateTimeDesc() throws Exception {
+  public void getNodesReturnsAllCandidatesWhenLimitAllows() {
     clearChannels();
     Node node1 = new Node(new InetSocketAddress(localIp, 90));
-    Field field = node1.getClass().getDeclaredField("updateTime");
-    field.setAccessible(true);
-    field.set(node1, System.currentTimeMillis());
-
     Node node2 = new Node(new InetSocketAddress(localIp, 100));
-    field = node2.getClass().getDeclaredField("updateTime");
-    field.setAccessible(true);
-    field.set(node2, System.currentTimeMillis() + 10);
-
-    Assert.assertTrue(node1.getUpdateTime() < node2.getUpdateTime());
 
     List<Node> connectableNodes = new ArrayList<>();
     connectableNodes.add(node1);
@@ -83,7 +74,10 @@ public class ConnPoolServiceTest {
     List<Node> nodes = connPoolService.getNodes(new HashSet<>(), new HashSet<>(), connectableNodes,
         2);
     Assert.assertEquals(2, nodes.size());
-    Assert.assertTrue(nodes.get(0).getUpdateTime() > nodes.get(1).getUpdateTime());
+    Set<InetSocketAddress> selectedAddresses = new HashSet<>();
+    nodes.forEach(node -> selectedAddresses.add(node.getPreferInetSocketAddress()));
+    Assert.assertTrue(selectedAddresses.contains(node1.getPreferInetSocketAddress()));
+    Assert.assertTrue(selectedAddresses.contains(node2.getPreferInetSocketAddress()));
 
     int limit = 1;
     List<Node> nodes2 = connPoolService.getNodes(new HashSet<>(), new HashSet<>(), connectableNodes,
@@ -127,17 +121,18 @@ public class ConnPoolServiceTest {
   }
 
   @Test
-  public void poolScanUsesLiveActiveNodesWithoutDialCooldown() throws Exception {
+  public void poolScanUsesIsolatedActiveNodesWithoutDialCooldown() throws Exception {
     clearChannels();
     ConnectionPolicy.replaceBlockedIps(new HashSet<>());
+    P2pConfig isolatedConfig = new P2pConfig();
+    isolatedConfig.setMinConnections(0);
+    isolatedConfig.setMinActiveConnections(0);
     InetSocketAddress address = new InetSocketAddress("192.0.2.10", 18888);
-    Parameter.p2pConfig.getActiveNodes().add(address);
-    int minConnections = Parameter.p2pConfig.getMinConnections();
-    int minActiveConnections = Parameter.p2pConfig.getMinActiveConnections();
-    Parameter.p2pConfig.setMinConnections(0);
-    Parameter.p2pConfig.setMinActiveConnections(0);
+    isolatedConfig.getActiveNodes().add(address);
+    Assert.assertFalse(Parameter.p2pConfig.getActiveNodes().contains(address));
     CountingPeerClient peerClient = new CountingPeerClient();
     ConnPoolService connPoolService = new ConnPoolService();
+    connPoolService.p2pConfig = isolatedConfig;
     Field peerClientField = ConnPoolService.class.getDeclaredField("peerClient");
     peerClientField.setAccessible(true);
     peerClientField.set(connPoolService, peerClient);
@@ -148,19 +143,17 @@ public class ConnPoolServiceTest {
       connect.invoke(connPoolService, false);
       Assert.assertEquals(2, peerClient.connectCount);
 
-      Parameter.p2pConfig.getActiveNodes().remove(address);
+      isolatedConfig.getActiveNodes().remove(address);
       connect.invoke(connPoolService, false);
       Assert.assertEquals(2, peerClient.connectCount);
 
       InetSocketAddress blocked = new InetSocketAddress("192.0.2.12", 18888);
-      Parameter.p2pConfig.getActiveNodes().add(blocked);
+      isolatedConfig.getActiveNodes().add(blocked);
+      Assert.assertFalse(Parameter.p2pConfig.getActiveNodes().contains(blocked));
       ConnectionPolicy.replaceBlockedIps(Collections.singleton(blocked.getAddress()));
       connect.invoke(connPoolService, false);
       Assert.assertEquals(2, peerClient.connectCount);
     } finally {
-      Parameter.p2pConfig.getActiveNodes().clear();
-      Parameter.p2pConfig.setMinConnections(minConnections);
-      Parameter.p2pConfig.setMinActiveConnections(minActiveConnections);
       ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
     }
   }

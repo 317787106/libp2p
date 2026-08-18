@@ -47,6 +47,7 @@ public class PeerClient {
   public ChannelFuture connect(Node node, ChannelFutureListener future) {
     InetSocketAddress address = node.getPreferInetSocketAddress();
     if (ConnectionPolicy.isBlocked(address)) {
+      log.info("Reject connection to {} because its IP is manually blocked", address);
       return null;
     }
     ChannelFuture channelFuture = connectAsync(
@@ -65,6 +66,7 @@ public class PeerClient {
   public ChannelFuture connectAsync(Node node, boolean discoveryMode) {
     InetSocketAddress address = node.getPreferInetSocketAddress();
     if (ConnectionPolicy.isBlocked(address)) {
+      log.info("Reject connection to {} because its IP is manually blocked", address);
       return null;
     }
     ChannelFuture channelFuture =

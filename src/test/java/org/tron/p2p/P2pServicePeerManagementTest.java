@@ -1,8 +1,11 @@
 package org.tron.p2p;
 
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -60,6 +63,27 @@ public class P2pServicePeerManagementTest {
   }
 
   @Test
+  public void activeNodeAddressPolicyAllowsLoopback() {
+    Assert.assertTrue(p2pService.addActiveNode(new InetSocketAddress("127.0.0.1", 18888)));
+    Assert.assertTrue(p2pService.addActiveNode(new InetSocketAddress("::1", 18888)));
+  }
+
+  @Test
+  public void activeNodeAddressPolicyRejectsNonDialableAddresses() {
+    String[] invalidAddresses = {
+        "0.0.0.0", "::", "224.0.0.1", "ff02::1", "255.255.255.255"
+    };
+    for (String invalidAddress : invalidAddresses) {
+      try {
+        p2pService.addActiveNode(new InetSocketAddress(invalidAddress, 18888));
+        Assert.fail("Expected address to be rejected: " + invalidAddress);
+      } catch (IllegalArgumentException expected) {
+        Assert.assertTrue(expected.getMessage().contains("must not use"));
+      }
+    }
+  }
+
+  @Test
   public void activeNodeSetterKeepsCollectionSafeForRuntimeUpdates() {
     P2pConfig config = new P2pConfig();
     config.setActiveNodes(new ArrayList<InetSocketAddress>());
@@ -69,5 +93,19 @@ public class P2pServicePeerManagementTest {
 
     Assert.assertFalse(iterator.hasNext());
     Assert.assertEquals(1, config.getActiveNodes().size());
+  }
+
+  @Test
+  public void replaceBlockedIpsUpdatesP2pConfigWithDefensiveCopy() {
+    InetAddress address = new InetSocketAddress("192.0.2.23", 18888).getAddress();
+    Set<InetAddress> blockedIps = new HashSet<>();
+    blockedIps.add(address);
+
+    p2pService.replaceBlockedIps(blockedIps);
+
+    Assert.assertEquals(blockedIps, Parameter.p2pConfig.getBlockedIps());
+    Assert.assertTrue(ConnectionPolicy.isBlocked(address));
+    blockedIps.clear();
+    Assert.assertEquals(Collections.singleton(address), Parameter.p2pConfig.getBlockedIps());
   }
 }

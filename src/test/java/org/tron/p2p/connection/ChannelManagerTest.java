@@ -1,6 +1,7 @@
 package org.tron.p2p.connection;
 
 import com.google.protobuf.ByteString;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -153,6 +154,16 @@ public class ChannelManagerTest {
   }
 
   @Test
+  public void testConnectRejectsUnresolvedAddressBeforeNetworkAccess() {
+    try {
+      ChannelManager.connect(InetSocketAddress.createUnresolved("peer.example", 18888));
+      Assert.fail("Expected unresolved address to be rejected");
+    } catch (IllegalArgumentException expected) {
+      Assert.assertTrue(expected.getMessage().contains("must be resolved"));
+    }
+  }
+
+  @Test
   public synchronized void testDisconnectUsesEndpointAndBlockedReplacementUsesIp()
       throws Exception {
     Parameter.p2pConfig = new P2pConfig();
@@ -170,11 +181,24 @@ public class ChannelManagerTest {
     Assert.assertTrue(first.isDisconnect());
     Assert.assertFalse(second.isDisconnect());
     Assert.assertFalse(other.isDisconnect());
+    ByteBuf disconnectData = ((EmbeddedChannel) first.getCtx().channel()).readOutbound();
+    Assert.assertNotNull(disconnectData);
+    try {
+      byte[] encodedMessage = new byte[disconnectData.readableBytes()];
+      disconnectData.readBytes(encodedMessage);
+      Assert.assertEquals(MessageType.DISCONNECT.getType(), encodedMessage[0]);
+      Connect.P2pDisconnectMessage disconnectMessage = Connect.P2pDisconnectMessage.parseFrom(
+          ArrayUtils.subarray(encodedMessage, 1, encodedMessage.length));
+      Assert.assertEquals(Connect.DisconnectReason.REQUESTED, disconnectMessage.getReason());
+    } finally {
+      disconnectData.release();
+    }
 
     ConnectionPolicy.replaceBlockedIps(Collections.singleton(secondAddress.getAddress()));
     Assert.assertEquals(1, ChannelManager.disconnectBlockedIps());
     Assert.assertTrue(second.isDisconnect());
     Assert.assertFalse(other.isDisconnect());
+    Assert.assertNull(((EmbeddedChannel) second.getCtx().channel()).readOutbound());
   }
 
   private Channel newChannel(InetSocketAddress address) throws Exception {

@@ -65,6 +65,7 @@ public class P2pService {
   public boolean addActiveNode(InetSocketAddress address) {
     NetUtil.validateInetSocketAddress(address);
     if (ConnectionPolicy.isBlocked(address)) {
+      log.info("Reject adding active node {} because its IP is manually blocked", address);
       return false;
     }
     P2pConfig p2pConfig = Parameter.p2pConfig;
@@ -99,6 +100,7 @@ public class P2pService {
 
   public int replaceBlockedIps(Set<InetAddress> blockedIps) {
     ConnectionPolicy.replaceBlockedIps(blockedIps);
+    Parameter.p2pConfig.setBlockedIps(new HashSet<>(blockedIps));
     int disconnectedCount = ChannelManager.disconnectBlockedIps();
     log.info("Replaced blocked IPs, size {}, disconnected channels {}",
         blockedIps.size(), disconnectedCount);
