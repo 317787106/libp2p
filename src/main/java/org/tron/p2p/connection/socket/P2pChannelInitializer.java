@@ -5,10 +5,12 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.FixedRecvByteBufAllocator;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import java.net.InetSocketAddress;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.tron.p2p.connection.Channel;
 import org.tron.p2p.connection.ChannelManager;
+import org.tron.p2p.connection.ConnectionPolicy;
 
 @Slf4j(topic = "net")
 public class P2pChannelInitializer extends ChannelInitializer<NioSocketChannel> {
@@ -27,6 +29,12 @@ public class P2pChannelInitializer extends ChannelInitializer<NioSocketChannel> 
   @Override
   public void initChannel(NioSocketChannel ch) {
     try {
+      InetSocketAddress remoteAddress = (InetSocketAddress) ch.remoteAddress();
+      if (ConnectionPolicy.isBlocked(remoteAddress)) {
+        log.debug("Close inbound connection from blocked address {}", remoteAddress);
+        ch.close();
+        return;
+      }
       final Channel channel = new Channel();
       channel.init(ch.pipeline(), remoteId, peerDiscoveryMode);
 

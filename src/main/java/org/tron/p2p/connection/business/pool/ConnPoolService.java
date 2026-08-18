@@ -2,6 +2,7 @@ package org.tron.p2p.connection.business.pool;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
+import io.netty.channel.ChannelFuture;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ import org.tron.p2p.P2pEventHandler;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.Channel;
 import org.tron.p2p.connection.ChannelManager;
+import org.tron.p2p.connection.ConnectionPolicy;
 import org.tron.p2p.connection.message.base.P2pDisconnectMessage;
 import org.tron.p2p.connection.socket.PeerClient;
 import org.tron.p2p.discover.Node;
@@ -59,14 +61,12 @@ public class ConnPoolService extends P2pEventHandler {
 
   public P2pConfig p2pConfig = Parameter.p2pConfig;
   private PeerClient peerClient;
-  private final List<InetSocketAddress> configActiveNodes = new ArrayList<>();
   private int minCandidateSize = 50;
 
   public ConnPoolService() {
     this.messageTypes = new HashSet<>(); //no message type registers
     try {
       Parameter.addP2pEventHandle(this);
-      configActiveNodes.addAll(p2pConfig.getActiveNodes());
     } catch (P2pException e) {
       //no exception will throw
     }
@@ -106,6 +106,9 @@ public class ConnPoolService extends P2pEventHandler {
 
   private void connect(boolean isFilterActiveNodes) {
     List<Node> connectNodes = new ArrayList<>();
+    // Snapshot of endpoints selected from activeNodes during this scan. It is used at dispatch
+    // time to skip nodes removed concurrently and to preserve active-node connection semantics.
+    Set<InetSocketAddress> activeCandidates = new HashSet<>();
 
     //collect already used nodes in channelManager
     Set<InetAddress> addressInUse = new HashSet<>();
@@ -126,12 +129,13 @@ public class ConnPoolService extends P2pEventHandler {
 
     p2pConfig.getActiveNodes().forEach(address -> {
       if (!isFilterActiveNodes && !inetInUse.contains(address) && !addressInUse.contains(
-          address.getAddress())) {
+          address.getAddress()) && canDialActiveNode(address)) {
         addressInUse.add(address.getAddress());
         inetInUse.add(address);
         Node node = new Node(address); //use a random NodeId for config activeNodes
         if (node.getPreferInetSocketAddress() != null) {
           connectNodes.add(node);
+          activeCandidates.add(address);
         }
       }
     });
@@ -195,11 +199,17 @@ public class ConnPoolService extends P2pEventHandler {
     //establish tcp connection with chose nodes by peerClient
     {
       connectNodes.forEach(n -> {
-        log.info("Connect to peer {}", n.getPreferInetSocketAddress());
-        peerClient.connectAsync(n, false);
-        peerClientCache.put(n.getPreferInetSocketAddress().getAddress(),
-            System.currentTimeMillis());
-        if (!configActiveNodes.contains(n.getPreferInetSocketAddress())) {
+        InetSocketAddress address = n.getPreferInetSocketAddress();
+        boolean activeCandidate = activeCandidates.contains(address);
+        if (ConnectionPolicy.isBlocked(address)
+            || (activeCandidate && !p2pConfig.getActiveNodes().contains(address))
+            || !reserveDial(address.getAddress())) {
+          return;
+        }
+        log.info("Connect to peer {}", address);
+        boolean activeNode = activeCandidate || p2pConfig.getActiveNodes().contains(address);
+        ChannelFuture channelFuture = peerClient.connectAsync(n, false, !activeNode);
+        if (channelFuture != null && !activeNode) {
           connectingPeersCount.incrementAndGet();
         }
       });
@@ -232,7 +242,8 @@ public class ConnPoolService extends P2pEventHandler {
     InetSocketAddress inetSocketAddress = node.getPreferInetSocketAddress();
     InetAddress inetAddress = inetSocketAddress.getAddress();
     Long forbiddenTime = ChannelManager.getBannedNodes().getIfPresent(inetAddress);
-    if ((forbiddenTime != null && now <= forbiddenTime)
+    if (ConnectionPolicy.isBlocked(inetAddress)
+        || (forbiddenTime != null && now <= forbiddenTime)
         || (ChannelManager.getConnectionNum(inetAddress)
         >= p2pConfig.getMaxConnectionsWithSameIp())
         || (node.getId() != null && nodesInUse.contains(node.getHexId()))
@@ -273,10 +284,10 @@ public class ConnPoolService extends P2pEventHandler {
   }
 
   public void triggerConnect(InetSocketAddress address) {
-    if (configActiveNodes.contains(address)) {
+    connectingPeersCount.updateAndGet(count -> Math.max(0, count - 1));
+    if (p2pConfig.getActiveNodes().contains(address)) {
       return;
     }
-    connectingPeersCount.decrementAndGet();
     if (poolLoopExecutor.getQueue().size() >= Parameter.CONN_MAX_QUEUE_SIZE) {
       log.warn("ConnPool task' size is greater than or equal to {}", Parameter.CONN_MAX_QUEUE_SIZE);
       return;
@@ -294,6 +305,19 @@ public class ConnPoolService extends P2pEventHandler {
     } catch (Exception e) {
       log.warn("Submit task failed, message:{}", e.getMessage());
     }
+  }
+
+  // Checks whether an active node can enter the current dial attempt.
+  private boolean canDialActiveNode(InetSocketAddress address) {
+    Long forbiddenTime = ChannelManager.getBannedNodes().getIfPresent(address.getAddress());
+    return !ConnectionPolicy.isBlocked(address)
+        && peerClientCache.getIfPresent(address.getAddress()) == null
+        && (forbiddenTime == null || forbiddenTime < System.currentTimeMillis());
+  }
+
+  // Atomically reserves the dial cooldown window for an IP.
+  private boolean reserveDial(InetAddress address) {
+    return peerClientCache.asMap().putIfAbsent(address, System.currentTimeMillis()) == null;
   }
 
   @Override

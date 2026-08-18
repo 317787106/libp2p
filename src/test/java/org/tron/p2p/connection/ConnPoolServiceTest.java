@@ -2,8 +2,10 @@ package org.tron.p2p.connection;
 
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -12,8 +14,10 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.tron.p2p.P2pConfig;
+import org.tron.p2p.P2pService;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.business.pool.ConnPoolService;
+import org.tron.p2p.connection.socket.PeerClient;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.discover.NodeManager;
 
@@ -121,6 +125,75 @@ public class ConnPoolServiceTest {
     ConnPoolService connPoolService = new ConnPoolService();
     List<Node> nodes = connPoolService.getNodes(nodesInUse, new HashSet<>(), connectableNodes, 1);
     Assert.assertEquals(0, nodes.size());
+  }
+
+  @Test
+  public void poolScanUsesLiveActiveNodesAndDialCooldown() throws Exception {
+    clearChannels();
+    ConnectionPolicy.replaceBlockedIps(new HashSet<>());
+    InetSocketAddress address = new InetSocketAddress("192.0.2.10", 18888);
+    Parameter.p2pConfig.getActiveNodes().add(address);
+    int minConnections = Parameter.p2pConfig.getMinConnections();
+    int minActiveConnections = Parameter.p2pConfig.getMinActiveConnections();
+    Parameter.p2pConfig.setMinConnections(0);
+    Parameter.p2pConfig.setMinActiveConnections(0);
+    CountingPeerClient peerClient = new CountingPeerClient();
+    ConnPoolService connPoolService = new ConnPoolService();
+    Field peerClientField = ConnPoolService.class.getDeclaredField("peerClient");
+    peerClientField.setAccessible(true);
+    peerClientField.set(connPoolService, peerClient);
+    Method connect = ConnPoolService.class.getDeclaredMethod("connect", boolean.class);
+    connect.setAccessible(true);
+    try {
+      connect.invoke(connPoolService, false);
+      connect.invoke(connPoolService, false);
+      Assert.assertEquals(1, peerClient.connectCount);
+      Assert.assertFalse(peerClient.lastTrigger);
+
+      Parameter.p2pConfig.getActiveNodes().remove(address);
+      connect.invoke(connPoolService, false);
+      Assert.assertEquals(1, peerClient.connectCount);
+
+      InetSocketAddress blocked = new InetSocketAddress("192.0.2.12", 18888);
+      Parameter.p2pConfig.getActiveNodes().add(blocked);
+      ConnectionPolicy.replaceBlockedIps(Collections.singleton(blocked.getAddress()));
+      connect.invoke(connPoolService, false);
+      Assert.assertEquals(1, peerClient.connectCount);
+    } finally {
+      Parameter.p2pConfig.getActiveNodes().clear();
+      Parameter.p2pConfig.setMinConnections(minConnections);
+      Parameter.p2pConfig.setMinActiveConnections(minActiveConnections);
+      ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
+    }
+  }
+
+  @Test
+  public void addActiveNodeIsIdempotentAndRemoveUsesLiveCollection() {
+    InetSocketAddress address = new InetSocketAddress("192.0.2.13", 18888);
+    P2pService p2pService = new P2pService();
+    try {
+      Assert.assertTrue(p2pService.addActiveNode(address));
+      Assert.assertFalse(p2pService.addActiveNode(address));
+      Assert.assertTrue(Parameter.p2pConfig.getActiveNodes().contains(address));
+      Assert.assertTrue(p2pService.removeActiveNode(address));
+      Assert.assertFalse(p2pService.removeActiveNode(address));
+    } finally {
+      Parameter.p2pConfig.getActiveNodes().remove(address);
+    }
+  }
+
+  private static class CountingPeerClient extends PeerClient {
+
+    private int connectCount;
+    private boolean lastTrigger;
+
+    @Override
+    public io.netty.channel.ChannelFuture connectAsync(Node node, boolean discoveryMode,
+        boolean trigger) {
+      connectCount++;
+      lastTrigger = trigger;
+      return null;
+    }
   }
 
   @AfterClass

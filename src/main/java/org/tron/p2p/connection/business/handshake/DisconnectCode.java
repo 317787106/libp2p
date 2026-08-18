@@ -7,6 +7,7 @@ public enum DisconnectCode {
   TIME_BANNED(3),
   DUPLICATE_PEER(4),
   MAX_CONNECTION_WITH_SAME_IP(5),
+  MANUALLY_BLOCKED(6),
   UNKNOWN(256);
 
   private final Integer value;

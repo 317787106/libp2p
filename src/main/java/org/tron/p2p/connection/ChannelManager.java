@@ -64,6 +64,7 @@ public class ChannelManager {
 
   public static void init() {
     isInit = true;
+    isShutdown = false;
     peerServer = new PeerServer();
     peerClient = new PeerClient();
     keepAliveService = new KeepAliveService();
@@ -78,11 +79,17 @@ public class ChannelManager {
   }
 
   public static void connect(InetSocketAddress address) {
+    if (ConnectionPolicy.isBlocked(address)) {
+      return;
+    }
     peerClient.connect(address.getAddress().getHostAddress(), address.getPort(),
         ByteArray.toHexString(NetUtil.getNodeId()));
   }
 
   public static ChannelFuture connect(Node node, ChannelFutureListener future) {
+    if (node == null || ConnectionPolicy.isBlocked(node.getPreferInetSocketAddress())) {
+      return null;
+    }
     return peerClient.connect(node, future);
   }
 
@@ -110,6 +117,11 @@ public class ChannelManager {
   }
 
   public static synchronized DisconnectCode processPeer(Channel channel) {
+
+    if (ConnectionPolicy.isBlocked(channel.getInetAddress())) {
+      log.debug("Peer {} is manually blocked", channel);
+      return DisconnectCode.MANUALLY_BLOCKED;
+    }
 
     if (!channel.isActive() && !channel.isTrustPeer()) {
       InetAddress inetAddress = channel.getInetAddress();
@@ -167,6 +179,9 @@ public class ChannelManager {
         break;
       case MAX_CONNECTION_WITH_SAME_IP:
         disconnectReason = DisconnectReason.TOO_MANY_PEERS_WITH_SAME_IP;
+        break;
+      case MANUALLY_BLOCKED:
+        disconnectReason = DisconnectReason.UNKNOWN;
         break;
       default: {
         disconnectReason = DisconnectReason.UNKNOWN;
@@ -302,5 +317,25 @@ public class ChannelManager {
 
   public static void triggerConnect(InetSocketAddress address) {
     connPoolService.triggerConnect(address);
+  }
+
+  public static int disconnect(InetSocketAddress address) {
+    Channel channel = channels.get(address);
+    if (channel == null || channel.isDisconnect()) {
+      return 0;
+    }
+    channel.close();
+    return 1;
+  }
+
+  public static int disconnectBlockedIps() {
+    int disconnectedCount = 0;
+    for (Channel channel : new ArrayList<>(channels.values())) {
+      if (ConnectionPolicy.isBlocked(channel.getInetAddress()) && !channel.isDisconnect()) {
+        channel.close();
+        disconnectedCount++;
+      }
+    }
+    return disconnectedCount;
   }
 }

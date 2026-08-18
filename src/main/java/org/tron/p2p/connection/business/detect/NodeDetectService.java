@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.Channel;
+import org.tron.p2p.connection.ConnectionPolicy;
 import org.tron.p2p.connection.business.MessageProcess;
 import org.tron.p2p.connection.message.Message;
 import org.tron.p2p.connection.message.detect.StatusMessage;
@@ -118,6 +119,7 @@ public class NodeDetectService implements MessageProcess {
     for (Node node : nodes) {
       InetSocketAddress socketAddress = node.getPreferInetSocketAddress();
       if (socketAddress != null
+          && !ConnectionPolicy.isBlocked(socketAddress)
           && !nodeStatMap.containsKey(socketAddress)
           && badNodesCache.getIfPresent(socketAddress.getAddress()) == null) {
         NodeStat nodeStat = new NodeStat(node);
@@ -133,6 +135,10 @@ public class NodeDetectService implements MessageProcess {
 
   private void detect(NodeStat stat) {
     try {
+      if (ConnectionPolicy.isBlocked(stat.getSocketAddress())) {
+        nodeStatMap.remove(stat.getSocketAddress());
+        return;
+      }
       stat.setTotalCount(stat.getTotalCount() + 1);
       setLastDetectTime(stat);
       peerClient.connectAsync(stat.getNode(), true);
@@ -212,7 +218,8 @@ public class NodeDetectService implements MessageProcess {
     List<NodeStat> stats = new ArrayList<>();
     List<Node> nodes = new ArrayList<>();
     nodeStatMap.values().forEach(stat -> {
-      if (stat.getStatusMessage() != null) {
+      if (stat.getStatusMessage() != null
+          && !ConnectionPolicy.isBlocked(stat.getSocketAddress())) {
         stats.add(stat);
       }
     });

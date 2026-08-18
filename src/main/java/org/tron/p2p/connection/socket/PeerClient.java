@@ -8,11 +8,13 @@ import io.netty.channel.DefaultMessageSizeEstimator;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import java.net.InetSocketAddress;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.bouncycastle.util.encoders.Hex;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.ChannelManager;
+import org.tron.p2p.connection.ConnectionPolicy;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.utils.NetUtil;
 
@@ -43,9 +45,8 @@ public class PeerClient {
   }
 
   public ChannelFuture connect(Node node, ChannelFutureListener future) {
-    ChannelFuture channelFuture = connectAsync(
-        node.getPreferInetSocketAddress().getAddress().getHostAddress(),
-        node.getPort(),
+    InetSocketAddress address = node.getPreferInetSocketAddress();
+    ChannelFuture channelFuture = connectAsync(address,
         node.getId() == null ? Hex.toHexString(NetUtil.getNodeId()) : node.getHexId(), false,
         false);
     if (ChannelManager.isShutdown) {
@@ -58,11 +59,14 @@ public class PeerClient {
   }
 
   public ChannelFuture connectAsync(Node node, boolean discoveryMode) {
-    ChannelFuture channelFuture =
-        connectAsync(node.getPreferInetSocketAddress().getAddress().getHostAddress(),
-            node.getPort(),
+    return connectAsync(node, discoveryMode, true);
+  }
+
+  public ChannelFuture connectAsync(Node node, boolean discoveryMode, boolean trigger) {
+    InetSocketAddress address = node.getPreferInetSocketAddress();
+    ChannelFuture channelFuture = connectAsync(address,
             node.getId() == null ? Hex.toHexString(NetUtil.getNodeId()) : node.getHexId(),
-            discoveryMode, true);
+            discoveryMode, trigger);
     if (ChannelManager.isShutdown) {
       return null;
     }
@@ -72,7 +76,7 @@ public class PeerClient {
           log.warn("Connect to peer {} fail, cause:{}", node.getPreferInetSocketAddress(),
               future.cause().getMessage());
           future.channel().close();
-          if (!discoveryMode) {
+          if (!discoveryMode && trigger) {
             ChannelManager.triggerConnect(node.getPreferInetSocketAddress());
           }
         }
@@ -83,6 +87,15 @@ public class PeerClient {
 
   private ChannelFuture connectAsync(String host, int port, String remoteId,
       boolean discoveryMode, boolean trigger) {
+    return connectAsync(new InetSocketAddress(host, port), remoteId, discoveryMode, trigger);
+  }
+
+  private ChannelFuture connectAsync(InetSocketAddress address, String remoteId,
+      boolean discoveryMode, boolean trigger) {
+    if (address == null || address.isUnresolved() || ConnectionPolicy.isBlocked(address)) {
+      log.debug("Skip outbound connection to disallowed address {}", address);
+      return null;
+    }
 
     P2pChannelInitializer p2pChannelInitializer = new P2pChannelInitializer(remoteId,
         discoveryMode, trigger);
@@ -93,7 +106,7 @@ public class PeerClient {
     b.option(ChannelOption.SO_KEEPALIVE, true);
     b.option(ChannelOption.MESSAGE_SIZE_ESTIMATOR, DefaultMessageSizeEstimator.DEFAULT);
     b.option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Parameter.NODE_CONNECTION_TIMEOUT);
-    b.remoteAddress(host, port);
+    b.remoteAddress(address);
     b.handler(p2pChannelInitializer);
     if (ChannelManager.isShutdown) {
       return null;

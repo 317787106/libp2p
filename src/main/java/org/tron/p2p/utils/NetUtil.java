@@ -217,6 +217,12 @@ public class NetUtil {
     }
   }
 
+  public static void validateInetSocketAddress(InetSocketAddress address) {
+    if (address == null || address.isUnresolved() || address.getPort() <= 0) {
+      throw new IllegalArgumentException("address must be resolved and use a valid port");
+    }
+  }
+
   private static String getIp(List<String> multiSrcUrls, boolean isAskIpv4) {
     int threadSize = multiSrcUrls.size();
     ExecutorService executor = Executors.newFixedThreadPool(threadSize,

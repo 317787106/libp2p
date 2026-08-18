@@ -6,6 +6,7 @@ import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.tron.p2p.P2pConfig;
@@ -18,9 +19,16 @@ import org.tron.p2p.protos.Discover;
 import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 
 @Slf4j(topic = "net")
 public class ChannelManagerTest {
+
+  @After
+  public void cleanUp() {
+    clearChannels();
+    ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
+  }
 
   @Test
   public synchronized void testGetConnectionNum() throws Exception{
@@ -129,6 +137,65 @@ public class ChannelManagerTest {
     c2.setNodeId("cc");
     code = ChannelManager.processPeer(c2);
     Assert.assertTrue(code.equals(DisconnectCode.DUPLICATE_PEER));
+  }
+
+  @Test
+  public synchronized void testProcessPeerRejectsManuallyBlockedIp() throws Exception {
+    clearChannels();
+    Parameter.p2pConfig = new P2pConfig();
+    InetSocketAddress address = new InetSocketAddress("192.0.2.30", 18888);
+    Channel channel = newChannel(address);
+    ConnectionPolicy.replaceBlockedIps(Collections.singleton(address.getAddress()));
+
+    DisconnectCode code = ChannelManager.processPeer(channel);
+
+    Assert.assertEquals(DisconnectCode.MANUALLY_BLOCKED, code);
+    Assert.assertFalse(ChannelManager.getChannels().containsKey(address));
+    ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
+  }
+
+  @Test
+  public synchronized void testDisconnectUsesEndpointAndBlockedReplacementUsesIp()
+      throws Exception {
+    clearChannels();
+    Parameter.p2pConfig = new P2pConfig();
+    InetSocketAddress firstAddress = new InetSocketAddress("192.0.2.31", 18888);
+    InetSocketAddress secondAddress = new InetSocketAddress("192.0.2.31", 18889);
+    InetSocketAddress otherAddress = new InetSocketAddress("192.0.2.32", 18888);
+    Channel first = newChannel(firstAddress);
+    Channel second = newChannel(secondAddress);
+    Channel other = newChannel(otherAddress);
+    ChannelManager.getChannels().put(firstAddress, first);
+    ChannelManager.getChannels().put(secondAddress, second);
+    ChannelManager.getChannels().put(otherAddress, other);
+
+    Assert.assertEquals(1, ChannelManager.disconnect(firstAddress));
+    Assert.assertTrue(first.isDisconnect());
+    Assert.assertFalse(second.isDisconnect());
+    Assert.assertFalse(other.isDisconnect());
+
+    ConnectionPolicy.replaceBlockedIps(Collections.singleton(secondAddress.getAddress()));
+    Assert.assertEquals(1, ChannelManager.disconnectBlockedIps());
+    Assert.assertTrue(second.isDisconnect());
+    Assert.assertFalse(other.isDisconnect());
+
+    ConnectionPolicy.replaceBlockedIps(Collections.emptySet());
+    clearChannels();
+  }
+
+  private Channel newChannel(InetSocketAddress address) throws Exception {
+    Channel channel = new Channel();
+    Field field = channel.getClass().getDeclaredField("inetSocketAddress");
+    field.setAccessible(true);
+    field.set(channel, address);
+    field = channel.getClass().getDeclaredField("inetAddress");
+    field.setAccessible(true);
+    field.set(channel, address.getAddress());
+    EmbeddedChannel embeddedChannel = new EmbeddedChannel(new ChannelInboundHandlerAdapter());
+    field = channel.getClass().getDeclaredField("ctx");
+    field.setAccessible(true);
+    field.set(channel, embeddedChannel.pipeline().firstContext());
+    return channel;
   }
 
   private void clearChannels() {

@@ -2,6 +2,7 @@ package org.tron.p2p;
 
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -11,12 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.connection.Channel;
 import org.tron.p2p.connection.ChannelManager;
+import org.tron.p2p.connection.ConnectionPolicy;
 import org.tron.p2p.discover.Node;
 import org.tron.p2p.discover.NodeManager;
 import org.tron.p2p.dns.DnsManager;
 import org.tron.p2p.exception.P2pException;
 import org.tron.p2p.stats.P2pStats;
 import org.tron.p2p.stats.StatsManager;
+import org.tron.p2p.utils.NetUtil;
 
 @Slf4j(topic = "net")
 public class P2pService {
@@ -26,6 +29,7 @@ public class P2pService {
 
   public void start(P2pConfig p2pConfig) {
     Parameter.p2pConfig = p2pConfig;
+    ConnectionPolicy.replaceBlockedIps(p2pConfig.getBlockedIps());
     NodeManager.init();
     ChannelManager.init();
     DnsManager.init();
@@ -58,6 +62,54 @@ public class P2pService {
     return ChannelManager.connect(node, future);
   }
 
+  public boolean addActiveNode(InetSocketAddress address) {
+    NetUtil.validateInetSocketAddress(address);
+    P2pConfig p2pConfig = requireConfig();
+    if (ConnectionPolicy.isBlocked(address)) {
+      return false;
+    }
+    List<InetSocketAddress> activeNodes = p2pConfig.getActiveNodes();
+    boolean changed;
+    synchronized (activeNodes) {
+      changed = !activeNodes.contains(address) && activeNodes.add(address);
+    }
+    if (changed) {
+      log.info("Added active node {}", address);
+    }
+    return changed;
+  }
+
+  public boolean removeActiveNode(InetSocketAddress address) {
+    NetUtil.validateInetSocketAddress(address);
+    List<InetSocketAddress> activeNodes = requireConfig().getActiveNodes();
+    boolean changed;
+    synchronized (activeNodes) {
+      changed = activeNodes.remove(address);
+    }
+    if (changed) {
+      log.info("Removed active node {}", address);
+    }
+    return changed;
+  }
+
+  public int disconnect(InetSocketAddress address) {
+    NetUtil.validateInetSocketAddress(address);
+    return ChannelManager.disconnect(address);
+  }
+
+  public int replaceBlockedIps(Set<InetAddress> blockedIps) {
+    requireConfig();
+    ConnectionPolicy.replaceBlockedIps(blockedIps);
+    int disconnectedCount = ChannelManager.disconnectBlockedIps();
+    log.info("Replaced blocked IPs, size {}, disconnected channels {}",
+        blockedIps.size(), disconnectedCount);
+    return disconnectedCount;
+  }
+
+  public void updateNodeId(Channel channel, String nodeId) {
+    ChannelManager.updateNodeId(channel, nodeId);
+  }
+
   public P2pStats getP2pStats() {
     return statsManager.getP2pStats();
   }
@@ -80,11 +132,14 @@ public class P2pService {
     return new ArrayList<>(nodes);
   }
 
-  public void updateNodeId(Channel channel, String nodeId) {
-    ChannelManager.updateNodeId(channel, nodeId);
-  }
-
   public int getVersion() {
     return Parameter.version;
+  }
+
+  private P2pConfig requireConfig() {
+    if (Parameter.p2pConfig == null) {
+      throw new IllegalStateException("P2p service has not been started");
+    }
+    return Parameter.p2pConfig;
   }
 }
