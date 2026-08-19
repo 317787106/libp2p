@@ -200,8 +200,9 @@ public class ConnPoolService extends P2pEventHandler {
         InetSocketAddress address = n.getPreferInetSocketAddress();
         boolean activeCandidate = activeCandidates.contains(address);
         boolean activeNode = p2pConfig.getActiveNodes().contains(address);
-        if (ConnectionPolicy.isBlocked(address)
-            || (activeCandidate && !activeNode)) {
+        // Recheck mutable runtime state before dialing because an active node may be removed,
+        // or its IP may be blocked, after candidate collection.
+        if (ConnectionPolicy.isBlocked(address) || (activeCandidate && !activeNode)) {
           return;
         }
         log.info("Connect to peer {}", address);
