@@ -10,6 +10,7 @@ import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
+import java.net.UnknownHostException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.util.Enumeration;
@@ -198,23 +199,66 @@ public class NetUtil {
   }
 
   public static InetSocketAddress parseInetSocketAddress(String para) {
-    int index = para.trim().lastIndexOf(":");
-    if (index > 0) {
-      String host = para.substring(0, index);
-      if (host.startsWith("[") && host.endsWith("]")) {
-        host = host.substring(1, host.length() - 1);
-      } else {
-        if (host.contains(":")) {
-          throw new RuntimeException(String.format("Invalid inetSocketAddress: \"%s\", "
-              + "use ipv4:port or [ipv6]:port", para));
-        }
-      }
-      int port = Integer.parseInt(para.substring(index + 1));
-      return new InetSocketAddress(host, port);
-    } else {
-      throw new RuntimeException(String.format("Invalid inetSocketAddress: \"%s\", "
-          + "use ipv4:port or [ipv6]:port", para));
+    if (para == null) {
+      throw invalidInetSocketAddress();
     }
+    String endpoint = para.trim();
+    String host;
+    String portText;
+    if (endpoint.startsWith("[")) {
+      // ipv6
+      int closingBracket = endpoint.indexOf(']');
+      if (closingBracket <= 1 || closingBracket + 1 >= endpoint.length()
+          || endpoint.charAt(closingBracket + 1) != ':') {
+        throw invalidInetSocketAddress();
+      }
+      host = endpoint.substring(1, closingBracket);
+      portText = endpoint.substring(closingBracket + 2);
+      if (host.indexOf('%') >= 0 || !validIpV6(host)) {
+        throw invalidInetSocketAddress();
+      }
+    } else {
+      //ipv4
+      int separator = endpoint.indexOf(':');
+      if (separator <= 0 || separator != endpoint.lastIndexOf(':')) {
+        throw invalidInetSocketAddress();
+      }
+      host = endpoint.substring(0, separator);
+      portText = endpoint.substring(separator + 1);
+      if (!validIpV4(host)) {
+        throw invalidInetSocketAddress();
+      }
+    }
+    if (portText.isEmpty() || portText.length() > 5) {
+      throw invalidInetSocketAddress();
+    }
+    for (int i = 0; i < portText.length(); i++) {
+      char character = portText.charAt(i);
+      if (character < '0' || character > '9') {
+        throw invalidInetSocketAddress();
+      }
+    }
+    int port;
+    try {
+      port = Integer.parseInt(portText);
+    } catch (NumberFormatException e) {
+      throw invalidInetSocketAddress();
+    }
+    if (port <= 0 || port > 65535) {
+      throw invalidInetSocketAddress();
+    }
+    try {
+      InetSocketAddress address = new InetSocketAddress(InetAddress.getByName(host), port);
+      validateInetSocketAddress(address);
+      return address;
+    } catch (UnknownHostException e) {
+      throw new IllegalArgumentException("Invalid inetSocketAddress", e);
+    }
+  }
+
+  private static IllegalArgumentException invalidInetSocketAddress() {
+    return new IllegalArgumentException(
+        "Invalid inetSocketAddress, use ipv4:port or [ipv6]:port");
   }
 
   public static void validateInetSocketAddress(InetSocketAddress address) {
