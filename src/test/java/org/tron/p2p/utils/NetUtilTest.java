@@ -223,34 +223,41 @@ public class NetUtilTest {
   }
 
   @Test
-  public void testParseInetSocketAddressRejectsInvalidEndpoints() {
-    assertInvalidInetSocketAddress(null);
-    assertInvalidInetSocketAddress("");
-    assertInvalidInetSocketAddress("peer.example:18888");
-    assertInvalidInetSocketAddress("[192.168.0.1]:18888");
-    assertInvalidInetSocketAddress("192.168.0.1:+18888");
-    assertInvalidInetSocketAddress("192.168.0.1:0");
-    assertInvalidInetSocketAddress("192.168.0.1:65536");
-    assertInvalidInetSocketAddress("[fe80::1%eth0]:18888");
-    assertInvalidInetSocketAddress("[::]:18888");
-    assertInvalidInetSocketAddress("224.0.0.1:18888");
-    assertInvalidInetSocketAddress("255.255.255.255:18888");
+  public void testParseInetSocketAddressAcceptsHostname() {
+    InetSocketAddress address = NetUtil.parseInetSocketAddress("localhost:18888");
+    Assert.assertEquals("localhost", address.getHostString());
+    Assert.assertEquals(18888, address.getPort());
   }
 
   @Test
-  public void testParseInetSocketAddressAcceptsLoopbackAndTrimsInput() {
-    InetSocketAddress ipv4 = NetUtil.parseInetSocketAddress(" 127.0.0.1:18888 ");
+  public void testParseIpSocketAddressRejectsInvalidEndpoints() {
+    assertInvalidIpSocketAddress(null);
+    assertInvalidIpSocketAddress("");
+    assertInvalidIpSocketAddress("peer.example:18888");
+    assertInvalidIpSocketAddress("[192.168.0.1]:18888");
+    assertInvalidIpSocketAddress("192.168.0.1:+18888");
+    assertInvalidIpSocketAddress("192.168.0.1:0");
+    assertInvalidIpSocketAddress("192.168.0.1:65536");
+    assertInvalidIpSocketAddress("[fe80::1%eth0]:18888");
+    assertInvalidIpSocketAddress("[::]:18888");
+    assertInvalidIpSocketAddress("224.0.0.1:18888");
+    assertInvalidIpSocketAddress("255.255.255.255:18888");
+  }
+
+  @Test
+  public void testParseIpSocketAddressAcceptsLoopbackAndTrimsInput() {
+    InetSocketAddress ipv4 = NetUtil.parseIpSocketAddress(" 127.0.0.1:18888 ");
     Assert.assertEquals("127.0.0.1", ipv4.getAddress().getHostAddress());
     Assert.assertEquals(18888, ipv4.getPort());
 
-    InetSocketAddress ipv6 = NetUtil.parseInetSocketAddress(" [::1]:18888 ");
+    InetSocketAddress ipv6 = NetUtil.parseIpSocketAddress(" [::1]:18888 ");
     Assert.assertEquals("0:0:0:0:0:0:0:1", ipv6.getAddress().getHostAddress());
     Assert.assertEquals(18888, ipv6.getPort());
   }
 
-  private void assertInvalidInetSocketAddress(String endpoint) {
+  private void assertInvalidIpSocketAddress(String endpoint) {
     try {
-      NetUtil.parseInetSocketAddress(endpoint);
+      NetUtil.parseIpSocketAddress(endpoint);
       Assert.fail("Expected invalid endpoint");
     } catch (IllegalArgumentException expected) {
       Assert.assertNotNull(expected.getMessage());

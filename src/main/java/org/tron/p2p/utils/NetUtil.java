@@ -198,7 +198,38 @@ public class NetUtil {
     return ipV6;
   }
 
+  /**
+   * Parses an endpoint using the legacy configuration behavior, which accepts both IP literals
+   * and hostnames.
+   *
+   * <p>Use {@link #parseIpSocketAddress(String)} when the input must not trigger DNS resolution.
+   */
   public static InetSocketAddress parseInetSocketAddress(String para) {
+    int index = para.trim().lastIndexOf(":");
+    if (index > 0) {
+      String host = para.substring(0, index);
+      if (host.startsWith("[") && host.endsWith("]")) {
+        host = host.substring(1, host.length() - 1);
+      } else {
+        if (host.contains(":")) {
+          throw new RuntimeException(String.format("Invalid inetSocketAddress: \"%s\", "
+              + "use ipv4:port or [ipv6]:port", para));
+        }
+      }
+      int port = Integer.parseInt(para.substring(index + 1));
+      return new InetSocketAddress(host, port);
+    } else {
+      throw new RuntimeException(String.format("Invalid inetSocketAddress: \"%s\", "
+          + "use ipv4:port or [ipv6]:port", para));
+    }
+  }
+
+  /**
+   * Parses an IP endpoint without resolving hostnames.
+   *
+   * <p>Only {@code ipv4:port} and {@code [ipv6]:port} are accepted.
+   */
+  public static InetSocketAddress parseIpSocketAddress(String para) {
     if (para == null) {
       throw invalidInetSocketAddress();
     }
@@ -218,7 +249,7 @@ public class NetUtil {
         throw invalidInetSocketAddress();
       }
     } else {
-      //ipv4
+      // ipv4
       int separator = endpoint.indexOf(':');
       if (separator <= 0 || separator != endpoint.lastIndexOf(':')) {
         throw invalidInetSocketAddress();
