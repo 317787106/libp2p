@@ -96,7 +96,7 @@ public class Node implements Serializable, Cloneable {
         this.hostV6 = null;
         return;
       }
-      InetAddress address = new InetSocketAddress(hostV6, 0).getAddress();
+      InetAddress address = new InetSocketAddress(hostV6, port).getAddress();
       this.hostV6 = address == null ? null : address.getHostAddress();
     }
   }
