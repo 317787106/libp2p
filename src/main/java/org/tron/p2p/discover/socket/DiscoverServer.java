@@ -16,7 +16,7 @@ import org.tron.p2p.stats.TrafficStats;
 @Slf4j(topic = "net")
 public class DiscoverServer {
 
-  private Channel channel;
+  private volatile Channel channel;
   private EventHandler eventHandler;
 
   private final int SERVER_RESTART_WAIT = 5000;
@@ -40,7 +40,7 @@ public class DiscoverServer {
     shutdown = true;
     if (channel != null) {
       try {
-        channel.close().await(SERVER_CLOSE_WAIT, TimeUnit.SECONDS);
+        channel.close().awaitUninterruptibly(SERVER_CLOSE_WAIT, TimeUnit.SECONDS);
       } catch (Exception e) {
         log.error("Closing discovery server failed", e);
       }
@@ -70,6 +70,10 @@ public class DiscoverServer {
             });
 
         channel = b.bind(port).sync().channel();
+        if (shutdown) {
+          channel.close().sync();
+          break;
+        }
 
         log.info("Discovery server started, bind port {}", port);
 
