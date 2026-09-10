@@ -96,7 +96,7 @@ public class Node implements Serializable, Cloneable {
         this.hostV6 = null;
         return;
       }
-      InetAddress address = new InetSocketAddress(hostV6, port).getAddress();
+      InetAddress address = new InetSocketAddress(hostV6, 0).getAddress();
       this.hostV6 = address == null ? null : address.getHostAddress();
     }
   }
@@ -177,11 +177,13 @@ public class Node implements Serializable, Cloneable {
   }
 
   public InetSocketAddress getInetSocketAddressV4() {
-    return StringUtils.isNotEmpty(hostV4) ? new InetSocketAddress(hostV4, port) : null;
+    return StringUtils.isNotEmpty(hostV4) && NetUtil.validPort(port)
+        ? new InetSocketAddress(hostV4, port) : null;
   }
 
   public InetSocketAddress getInetSocketAddressV6() {
-    return StringUtils.isNotEmpty(hostV6) ? new InetSocketAddress(hostV6, port) : null;
+    return StringUtils.isNotEmpty(hostV6) && NetUtil.validPort(port)
+        ? new InetSocketAddress(hostV6, port) : null;
   }
 
   @Override
