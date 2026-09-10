@@ -60,7 +60,7 @@ public class NetUtil {
   }
 
   public static boolean validPort(int port) {
-    return port > 0 && port <= 65535;
+    return port > 0 && port <= 0xFFFF;
   }
 
   public static boolean validNode(Node node) {
