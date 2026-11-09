@@ -129,8 +129,6 @@ public class DiscoveryEndpointTest {
 
   @Test
   public void findNodeResponseUsesActualSourceAddressAndPort() throws Exception {
-    service.getNodeHandler(new Node(id(2), null, "::1", PORT));
-    outbound.clear();
     Node claimed = new Node(id(2), "127.0.0.2", "::1", PORT + 1);
 
     receive(new FindNodeMessage(claimed, id(3)), "::1", PORT);
@@ -169,10 +167,8 @@ public class DiscoveryEndpointTest {
         "127.0.0.3", PORT);
 
     assertHonestRecord(honest, id(2), null, "::1");
-    Assert.assertEquals(3, service.getAllNodes().size());
-    Assert.assertNull(findNode("127.0.0.2", PORT).getHostV6());
-    assertOutbound(MessageType.KAD_PING, "127.0.0.2", PORT);
-    assertOnlyDestination("127.0.0.2", PORT);
+    Assert.assertEquals(2, service.getAllNodes().size());
+    Assert.assertTrue(outbound.isEmpty());
 
     outbound.clear();
     receive(new PingMessage(new Node(id(2), null, "::1", PORT),
@@ -181,7 +177,7 @@ public class DiscoveryEndpointTest {
   }
 
   @Test
-  public void dualStackNeighborsAreProbedAndLearnedIndependently() throws Exception {
+  public void dualStackNeighborKeepsBothAddressesAndUsesOneProbe() throws Exception {
     NodeHandler sender = active(new Node(id(2), "127.0.0.3", null, PORT));
     sender.sendFindNode(id(3));
     outbound.clear();
@@ -190,23 +186,18 @@ public class DiscoveryEndpointTest {
     receive(new NeighborsMessage(sender.getNode(), Collections.singletonList(neighbor), 1L),
         "127.0.0.3", PORT);
 
-    Assert.assertEquals(3, service.getAllNodes().size());
-    Node ipv4 = findNode("127.0.0.2", PORT);
-    Node ipv6 = findNode("::1", PORT);
-    Assert.assertNotSame(ipv4, ipv6);
-    Assert.assertNull(ipv4.getHostV6());
-    Assert.assertNull(ipv6.getHostV4());
-    Assert.assertFalse(ipv4.isConnectible(config.getNetworkId()));
-    Assert.assertFalse(ipv6.isConnectible(config.getNetworkId()));
-    Assert.assertEquals(2, outbound.size());
+    Assert.assertEquals(2, service.getAllNodes().size());
+    Node stored = findNode("127.0.0.2", PORT);
+    Assert.assertEquals("127.0.0.2", stored.getHostV4());
+    Assert.assertEquals(address("::1", PORT), stored.getInetSocketAddressV6());
+    Assert.assertFalse(stored.isConnectible(config.getNetworkId()));
+    Assert.assertEquals(1, outbound.size());
     assertOutbound(MessageType.KAD_PING, "127.0.0.2", PORT);
-    assertOutbound(MessageType.KAD_PING, "::1", PORT);
+    assertOnlyDestination("127.0.0.2", PORT);
 
     receive(new PongMessage(neighbor), "127.0.0.2", PORT);
-    Assert.assertTrue(ipv4.isConnectible(config.getNetworkId()));
-    Assert.assertFalse(ipv6.isConnectible(config.getNetworkId()));
-    receive(new PongMessage(neighbor), "::1", PORT);
-    Assert.assertTrue(ipv6.isConnectible(config.getNetworkId()));
+    Assert.assertTrue(stored.isConnectible(config.getNetworkId()));
+    Assert.assertEquals(2, service.getAllNodes().size());
   }
 
   @Test
@@ -226,17 +217,38 @@ public class DiscoveryEndpointTest {
   }
 
   @Test
-  public void mutableNodeMetadataCannotRedirectHandlerTraffic() throws Exception {
+  public void responsesUseSourceEvenWhenExistingRecordPrefersAnotherAddress() throws Exception {
     NodeHandler handler = active(new Node(id(2), null, "::1", PORT));
     handler.getNode().updateHostV4("127.0.0.2");
 
-    handler.sendPing();
     receive(new PingMessage(new Node(id(2), null, "::1", PORT),
         service.getPublicHomeNode()), "::1", PORT);
-
-    assertOutbound(MessageType.KAD_PING, "::1", PORT);
     assertOutbound(MessageType.KAD_PONG, "::1", PORT);
     assertOnlyDestination("::1", PORT);
+
+    outbound.clear();
+    receive(new FindNodeMessage(new Node(id(2), null, "::1", PORT), id(3)), "::1", PORT);
+    assertOutbound(MessageType.KAD_NEIGHBORS, "::1", PORT);
+    assertOnlyDestination("::1", PORT);
+  }
+
+  @Test
+  public void callerNodeAndActiveProbeTargetKeepTheirExistingBehavior() {
+    Node node = new Node(id(2), "127.0.0.2", "::1", PORT);
+    node.setNetworkId(config.getNetworkId());
+
+    NodeHandler handler = service.getNodeHandler(node);
+
+    Assert.assertSame(node, handler.getNode());
+    Assert.assertTrue(handler.getNode().isConnectible(config.getNetworkId()));
+    Assert.assertEquals(address("::1", PORT), handler.getNode().getInetSocketAddressV6());
+    outbound.clear();
+
+    handler.setNode(new Node(id(3), "127.0.0.3", null, PORT + 1));
+    handler.sendPing();
+
+    assertOutbound(MessageType.KAD_PING, "127.0.0.3", PORT + 1);
+    assertOnlyDestination("127.0.0.3", PORT + 1);
   }
 
   private NodeHandler active(Node node) throws Exception {

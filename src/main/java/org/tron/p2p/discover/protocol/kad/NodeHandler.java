@@ -27,8 +27,6 @@ public class NodeHandler {
   @Getter
   private volatile State state;
   private KadService kadService;
-  // Keep traffic on this handler's endpoint even if its Node metadata changes.
-  private final InetSocketAddress address;
   private NodeHandler replaceCandidate;
   private AtomicInteger pingTrials = new AtomicInteger(3);
   private volatile boolean waitForPong = false;
@@ -44,9 +42,8 @@ public class NodeHandler {
   public NodeHandler(Node node, KadService kadService) {
     this.node = node;
     this.kadService = kadService;
-    this.address = node.getPreferInetSocketAddress();
     // send ping only if IP stack is compatible
-    if (address != null) {
+    if (node.getPreferInetSocketAddress() != null) {
       changeState(State.DISCOVERED);
     }
   }
@@ -107,8 +104,12 @@ public class NodeHandler {
   }
 
   public void handlePing(PingMessage msg) {
+    handlePing(msg, node.getPreferInetSocketAddress());
+  }
+
+  void handlePing(PingMessage msg, InetSocketAddress sender) {
     if (!kadService.getTable().getNode().equals(node)) {
-      sendPong();
+      sendPong(sender);
     }
     node.setNetworkId(msg.getNetworkId());
     if (!node.isConnectible(Parameter.p2pConfig.getNetworkId())) {
@@ -144,14 +145,18 @@ public class NodeHandler {
     waitForNeighbors = false;
     for (Node n : msg.getNodes()) {
       if (!kadService.getPublicHomeNode().getHexId().equals(n.getHexId())) {
-        kadService.addDiscoveredNode(n);
+        kadService.getNodeHandler(n);
       }
     }
   }
 
   public void handleFindNode(FindNodeMessage msg) {
+    handleFindNode(msg, node.getPreferInetSocketAddress());
+  }
+
+  void handleFindNode(FindNodeMessage msg, InetSocketAddress sender) {
     List<Node> closest = kadService.getTable().getClosestNodes(msg.getTargetId());
-    sendNeighbours(closest, msg.getTimestamp());
+    sendNeighbours(closest, msg.getTimestamp(), sender);
   }
 
   public synchronized void handleTimedOut() {
@@ -190,7 +195,7 @@ public class NodeHandler {
       });
     } catch (RejectedExecutionException e) {
       log.debug("Skip pong timeout for {}, timer stopped or queue full",
-          address);
+          node.getPreferInetSocketAddress());
     }
   }
 
@@ -202,8 +207,12 @@ public class NodeHandler {
   }
 
   public void sendPong() {
+    sendPong(node.getPreferInetSocketAddress());
+  }
+
+  private void sendPong(InetSocketAddress address) {
     Message pong = new PongMessage(kadService.getPublicHomeNode());
-    sendMessage(pong);
+    sendMessage(pong, address);
   }
 
   public void sendFindNode(byte[] target) {
@@ -222,11 +231,15 @@ public class NodeHandler {
   }
 
   public void sendNeighbours(List<Node> neighbours, long sequence) {
+    sendNeighbours(neighbours, sequence, node.getPreferInetSocketAddress());
+  }
+
+  private void sendNeighbours(List<Node> neighbours, long sequence, InetSocketAddress address) {
     Node from = kadService.getPublicHomeNode();
     for (int size = neighbours.size(); size >= 0; size--) {
       Message msg = new NeighborsMessage(from, neighbours.subList(0, size), sequence);
       if (msg.getSendData().length < Constant.MAX_DISCOVERY_PACKET_SIZE) {
-        sendMessage(msg);
+        sendMessage(msg, address);
         return;
       }
     }
@@ -234,6 +247,10 @@ public class NodeHandler {
   }
 
   private void sendMessage(Message msg) {
+    sendMessage(msg, node.getPreferInetSocketAddress());
+  }
+
+  private void sendMessage(Message msg, InetSocketAddress address) {
     kadService.sendOutbound(new UdpEvent(msg, address));
   }
 

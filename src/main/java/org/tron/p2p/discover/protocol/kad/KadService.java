@@ -146,20 +146,23 @@ public class KadService implements DiscoverService {
 
     // Self-reported alternative addresses must not identify or modify another endpoint's record.
     Node from = m.getFrom();
-    NodeHandler nodeHandler = getNodeHandler(sender, from.getId(), from.getPort());
+    boolean ipv4 = sender.getAddress() instanceof Inet4Address;
+    String host = sender.getAddress().getHostAddress();
+    Node node = new Node(from.getId(), ipv4 ? host : null, ipv4 ? null : host,
+        sender.getPort(), from.getPort());
+    NodeHandler nodeHandler = getNodeHandler(node);
     nodeHandler.getNode().setId(from.getId());
-    nodeHandler.getNode().setBindPort(from.getPort());
     nodeHandler.getNode().touch();
 
     switch (m.getType()) {
       case KAD_PING:
-        nodeHandler.handlePing((PingMessage) m);
+        nodeHandler.handlePing((PingMessage) m, sender);
         break;
       case KAD_PONG:
         nodeHandler.handlePong((PongMessage) m);
         break;
       case KAD_FIND_NODE:
-        nodeHandler.handleFindNode((FindNodeMessage) m);
+        nodeHandler.handleFindNode((FindNodeMessage) m, sender);
         break;
       case KAD_NEIGHBORS:
         nodeHandler.handleNeighbours((NeighborsMessage) m, sender);
@@ -170,36 +173,24 @@ public class KadService implements DiscoverService {
   }
 
   public NodeHandler getNodeHandler(Node n) {
-    InetSocketAddress address = n.getPreferInetSocketAddress();
-    if (address == null) {
-      return new NodeHandler(n, this);
-    }
-    return getNodeHandler(address, n.getId(), n.getPort());
-  }
-
-  void addDiscoveredNode(Node n) {
-    // Neighbor advertisements are probe candidates, not evidence that two endpoints are one node.
+    NodeHandler ret = null;
     InetSocketAddress inet4 = n.getInetSocketAddressV4();
     InetSocketAddress inet6 = n.getInetSocketAddressV6();
-    if (canUseEndpoint(inet4)) {
-      getNodeHandler(inet4, n.getId(), n.getPort());
+    if (inet4 != null) {
+      ret = nodeHandlerMap.get(inet4);
     }
-    if (canUseEndpoint(inet6)) {
-      getNodeHandler(inet6, n.getId(), n.getPort());
+    if (ret == null && inet6 != null) {
+      ret = nodeHandlerMap.get(inet6);
     }
-  }
 
-  private NodeHandler getNodeHandler(InetSocketAddress address, byte[] id, int bindPort) {
-    NodeHandler ret = nodeHandlerMap.get(address);
     if (ret == null) {
       trimTable();
-      boolean ipv4 = address.getAddress() instanceof Inet4Address;
-      String host = address.getAddress().getHostAddress();
-      Node node = new Node(id, ipv4 ? host : null, ipv4 ? null : host,
-          address.getPort(), bindPort);
-      ret = new NodeHandler(node, this);
-      nodeHandlerMap.put(address, ret);
+      ret = new NodeHandler(n, this);
+      if (n.getPreferInetSocketAddress() != null) {
+        nodeHandlerMap.put(n.getPreferInetSocketAddress(), ret);
+      }
     }
+    // An advertisement may find an existing handler, but cannot add an unverified address to it.
     return ret;
   }
 
