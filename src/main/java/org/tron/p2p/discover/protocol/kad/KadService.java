@@ -16,6 +16,7 @@ import java.util.stream.Collectors;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.discover.DiscoverService;
@@ -27,6 +28,7 @@ import org.tron.p2p.discover.message.kad.PingMessage;
 import org.tron.p2p.discover.message.kad.PongMessage;
 import org.tron.p2p.discover.protocol.kad.table.NodeTable;
 import org.tron.p2p.discover.socket.UdpEvent;
+import org.tron.p2p.utils.NetUtil;
 
 @Slf4j(topic = "net")
 public class KadService implements DiscoverService {
@@ -137,22 +139,16 @@ public class KadService implements DiscoverService {
 
     InetSocketAddress sender = udpEvent.getAddress();
 
-    Node n;
-    if (sender.getAddress() instanceof Inet4Address) {
-      n = new Node(m.getFrom().getId(), sender.getHostString(), m.getFrom().getHostV6(),
-          sender.getPort(), m.getFrom().getPort());
-    } else {
-      n = new Node(m.getFrom().getId(), m.getFrom().getHostV4(), sender.getHostString(),
-          sender.getPort(), m.getFrom().getPort());
-    }
-
-    if (n.getPreferInetSocketAddress() == null) {
+    if (!canUseEndpoint(sender)) {
       log.debug("Drop discovery message from {}: no compatible reply address", sender);
       return;
     }
 
-    NodeHandler nodeHandler = getNodeHandler(n);
-    nodeHandler.getNode().setId(n.getId());
+    // Self-reported alternative addresses must not identify or modify another endpoint's record.
+    Node from = m.getFrom();
+    NodeHandler nodeHandler = getNodeHandler(sender, from.getId(), from.getPort());
+    nodeHandler.getNode().setId(from.getId());
+    nodeHandler.getNode().setBindPort(from.getPort());
     nodeHandler.getNode().touch();
 
     switch (m.getType()) {
@@ -174,27 +170,44 @@ public class KadService implements DiscoverService {
   }
 
   public NodeHandler getNodeHandler(Node n) {
-    NodeHandler ret = null;
+    InetSocketAddress address = n.getPreferInetSocketAddress();
+    if (address == null) {
+      return new NodeHandler(n, this);
+    }
+    return getNodeHandler(address, n.getId(), n.getPort());
+  }
+
+  void addDiscoveredNode(Node n) {
+    // Neighbor advertisements are probe candidates, not evidence that two endpoints are one node.
     InetSocketAddress inet4 = n.getInetSocketAddressV4();
     InetSocketAddress inet6 = n.getInetSocketAddressV6();
-    if (inet4 != null) {
-      ret = nodeHandlerMap.get(inet4);
+    if (canUseEndpoint(inet4)) {
+      getNodeHandler(inet4, n.getId(), n.getPort());
     }
-    if (ret == null && inet6 != null) {
-      ret = nodeHandlerMap.get(inet6);
+    if (canUseEndpoint(inet6)) {
+      getNodeHandler(inet6, n.getId(), n.getPort());
     }
+  }
 
+  private NodeHandler getNodeHandler(InetSocketAddress address, byte[] id, int bindPort) {
+    NodeHandler ret = nodeHandlerMap.get(address);
     if (ret == null) {
       trimTable();
-      ret = new NodeHandler(n, this);
-      if (n.getPreferInetSocketAddress() != null) {
-        nodeHandlerMap.put(n.getPreferInetSocketAddress(), ret);
-      }
-    } else {
-      ret.getNode().updateHostV4(n.getHostV4());
-      ret.getNode().updateHostV6(n.getHostV6());
+      boolean ipv4 = address.getAddress() instanceof Inet4Address;
+      String host = address.getAddress().getHostAddress();
+      Node node = new Node(id, ipv4 ? host : null, ipv4 ? null : host,
+          address.getPort(), bindPort);
+      ret = new NodeHandler(node, this);
+      nodeHandlerMap.put(address, ret);
     }
     return ret;
+  }
+
+  private boolean canUseEndpoint(InetSocketAddress address) {
+    return address != null && !address.isUnresolved() && NetUtil.validPort(address.getPort())
+        && (address.getAddress() instanceof Inet4Address
+        ? StringUtils.isNotEmpty(Parameter.p2pConfig.getIp())
+        : StringUtils.isNotEmpty(Parameter.p2pConfig.getIpv6()));
   }
 
   public Node getPublicHomeNode() {

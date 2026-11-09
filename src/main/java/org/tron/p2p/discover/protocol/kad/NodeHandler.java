@@ -27,6 +27,8 @@ public class NodeHandler {
   @Getter
   private volatile State state;
   private KadService kadService;
+  // Keep traffic on this handler's endpoint even if its Node metadata changes.
+  private final InetSocketAddress address;
   private NodeHandler replaceCandidate;
   private AtomicInteger pingTrials = new AtomicInteger(3);
   private volatile boolean waitForPong = false;
@@ -42,8 +44,9 @@ public class NodeHandler {
   public NodeHandler(Node node, KadService kadService) {
     this.node = node;
     this.kadService = kadService;
+    this.address = node.getPreferInetSocketAddress();
     // send ping only if IP stack is compatible
-    if (node.getPreferInetSocketAddress() != null) {
+    if (address != null) {
       changeState(State.DISCOVERED);
     }
   }
@@ -141,7 +144,7 @@ public class NodeHandler {
     waitForNeighbors = false;
     for (Node n : msg.getNodes()) {
       if (!kadService.getPublicHomeNode().getHexId().equals(n.getHexId())) {
-        kadService.getNodeHandler(n);
+        kadService.addDiscoveredNode(n);
       }
     }
   }
@@ -187,7 +190,7 @@ public class NodeHandler {
       });
     } catch (RejectedExecutionException e) {
       log.debug("Skip pong timeout for {}, timer stopped or queue full",
-          node.getPreferInetSocketAddress());
+          address);
     }
   }
 
@@ -231,7 +234,7 @@ public class NodeHandler {
   }
 
   private void sendMessage(Message msg) {
-    kadService.sendOutbound(new UdpEvent(msg, node.getPreferInetSocketAddress()));
+    kadService.sendOutbound(new UdpEvent(msg, address));
   }
 
   @Override
