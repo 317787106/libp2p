@@ -204,10 +204,13 @@ public class KadService implements DiscoverService {
   }
 
   private boolean canUseEndpoint(InetSocketAddress address) {
-    return address != null && !address.isUnresolved() && NetUtil.validPort(address.getPort())
-        && (address.getAddress() instanceof Inet4Address
+    if (address == null || address.isUnresolved() || !NetUtil.validPort(address.getPort())) {
+      return false;
+    }
+
+    return address.getAddress() instanceof Inet4Address
         ? StringUtils.isNotEmpty(Parameter.p2pConfig.getIp())
-        : StringUtils.isNotEmpty(Parameter.p2pConfig.getIpv6()));
+        : StringUtils.isNotEmpty(Parameter.p2pConfig.getIpv6());
   }
 
   public Node getPublicHomeNode() {
