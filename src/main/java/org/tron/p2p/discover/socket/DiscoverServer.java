@@ -7,12 +7,14 @@ import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.handler.codec.protobuf.ProtobufVarint32FrameDecoder;
 import io.netty.handler.codec.protobuf.ProtobufVarint32LengthFieldPrepender;
+import java.io.IOException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.concurrent.BasicThreadFactory;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.tron.p2p.base.Parameter;
 import org.tron.p2p.stats.TrafficStats;
 
@@ -70,6 +72,7 @@ public class DiscoverServer {
   private void start() throws Exception {
     NioEventLoopGroup group = new NioEventLoopGroup(Parameter.UDP_NETTY_WORK_THREAD_NUM,
         new BasicThreadFactory.Builder().namingPattern("discoverServer").build());
+    boolean initialBindSucceeded = false;
     try {
       while (!shutdown) {
         Bootstrap b = new Bootstrap();
@@ -89,7 +92,20 @@ public class DiscoverServer {
               }
             });
 
-        channel = b.bind(port).sync().channel();
+        try {
+          channel = b.bind(port).sync().channel();
+        } catch (Exception e) {
+          if (!initialBindSucceeded || ExceptionUtils.indexOfType(e, IOException.class) < 0) {
+            throw e;
+          }
+          if (shutdown) {
+            break;
+          }
+          log.warn("Rebind discovery server with port {} failed, retry after {} seconds",
+              port, SERVER_RESTART_WAIT_SECONDS, e);
+          Thread.sleep(TimeUnit.SECONDS.toMillis(SERVER_RESTART_WAIT_SECONDS));
+          continue;
+        }
         if (shutdown) {
           channel.close().sync();
           initialBind.completeExceptionally(
@@ -99,6 +115,7 @@ public class DiscoverServer {
 
         log.info("Discovery server started, bind port {}", port);
         initialBind.complete(null);
+        initialBindSucceeded = true;
 
         channel.closeFuture().sync();
         if (shutdown) {
